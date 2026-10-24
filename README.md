@@ -107,11 +107,34 @@ src/
   index.html           Shell de la aplicación
   styles.css           Sistema visual, temas y estilos de todos los componentes
   types.ts             Tipos de dominio, IPC y contratos compartidos
-  app.ts               Arranque, rutas, temas, barra superior y paleta de comandos
-  actions.ts           Formularios, modales, recibos, contratos, respaldos y exportaciones
+  app.ts               Arranque de la aplicación y conexión entre módulos
+  actions.ts           Punto de entrada que reexporta las acciones por dominio
+  actions/
+    shared.ts          Utilidades comunes de formularios y selectores
+    clients.ts         Alta, edición y eliminación de clientes
+    loans.ts           Formularios, cancelación y reactivación de préstamos
+    payments.ts        Registro, edición y eliminación de cobros
+    documents.ts       Recibos, contratos e impresión
+    finance.ts         Movimientos, transferencias y cuentas
+    settings.ts        Ajustes, respaldo, restauración y exportación CSV
+    welcome.ts         Bienvenida y carga inicial de datos
   finance.ts           Motor financiero puro (clase LoanCalculator) y utilidades de formato
   seed.ts              Datos de demostración
-  lib/                 Estado y persistencia (StoreRepository, SaveQueue), navegación, iconos, UI y temas
+  lib/
+    routes.ts          Rutas, metadatos y grupos de navegación
+    router.ts          Ruta activa y lectura del hash
+    appearance.ts      Tema, densidad y escala de texto
+    sidebar.ts         Barra lateral, resumen de cuentas e indicador de guardado
+    theme-menu.ts      Selector de temas
+    palette.ts         Búsqueda global y acciones rápidas
+    shortcuts.ts       Atajos de teclado
+    view-host.ts       Registro de vistas y renderizado de la sección activa
+    app-info.ts        Información de versión expuesta por Electron
+    store.ts           Estado, persistencia (StoreRepository, SaveQueue) y reglas de negocio
+    nav.ts             Navegación por hash
+    icons.ts           Iconografía SVG
+    ui.ts              Componentes de interfaz reutilizables
+    themes.ts          Definición de los siete temas
   views/               Panel, clientes, préstamos, cobros, finanzas, reportes y configuración
 tests/
   finance.test.ts      Pruebas del motor financiero
@@ -120,6 +143,8 @@ scripts/
   copy-assets.mjs      Copia HTML, CSS e imágenes al renderer compilado
 dist/                  Salida de compilación (generada, no versionada)
 ```
+
+La interfaz está separada por responsabilidades: `app.ts` solo arranca y conecta módulos; `lib/router.ts` conserva la ruta activa; `lib/view-host.ts` decide qué vista renderizar; y cada acción de negocio vive en su archivo dentro de `src/actions/`. `src/actions.ts` mantiene las exportaciones anteriores para que las vistas no dependan de la ubicación interna de cada acción.
 
 La compilación usa tres configuraciones:
 
