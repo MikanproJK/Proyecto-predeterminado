@@ -22,11 +22,25 @@ import {
 } from '../lib/ui.js';
 import { navigate } from '../lib/nav.js';
 import * as actions from '../actions.js';
+import type { ViewContext } from '../types.js';
 
-const filters = { query: '', range: 'month', method: 'all', page: 1 };
+interface PaymentsFilters {
+  query: string;
+  range: string;
+  method: string;
+  page: number;
+}
+
+interface RangeBounds {
+  from: string;
+  to: string;
+  label: string;
+}
+
+const filters: PaymentsFilters = { query: '', range: 'month', method: 'all', page: 1 };
 const PAGE_SIZE = 12;
 
-function rangeBounds(range) {
+function rangeBounds(range: string): RangeBounds {
   const today = todayISO();
   const monthStart = `${today.slice(0, 8)}01`;
   switch (range) {
@@ -49,7 +63,7 @@ function rangeBounds(range) {
   }
 }
 
-export function render(root, ctx) {
+export function render(root: HTMLElement, ctx: ViewContext): void {
   const bounds = rangeBounds(filters.range);
   const all = [...state.db.payments].sort(
     (a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
@@ -154,31 +168,31 @@ export function render(root, ctx) {
     </div>
   </div>`;
 
-  const paint = () => render(root, ctx);
+  const paint = (): void => render(root, ctx);
 
-  root.querySelector('#payment-search').addEventListener('input', (event) => {
-    filters.query = event.target.value;
+  root.querySelector<HTMLInputElement>('#payment-search')!.addEventListener('input', (event) => {
+    filters.query = (event.target as HTMLInputElement).value;
     filters.page = 1;
     paint();
   });
-  root.querySelector('#payment-range').addEventListener('change', (event) => {
-    filters.range = event.target.value;
+  root.querySelector<HTMLSelectElement>('#payment-range')!.addEventListener('change', (event) => {
+    filters.range = (event.target as HTMLSelectElement).value;
     filters.page = 1;
     paint();
   });
-  root.querySelector('#payment-method').addEventListener('change', (event) => {
-    filters.method = event.target.value;
+  root.querySelector<HTMLSelectElement>('#payment-method')!.addEventListener('change', (event) => {
+    filters.method = (event.target as HTMLSelectElement).value;
     filters.page = 1;
     paint();
   });
-  root.querySelectorAll('[data-page]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-page]').forEach((btn) => {
     btn.addEventListener('click', () => {
       filters.page = Math.max(1, Number(btn.dataset.page));
       paint();
     });
   });
-  root.querySelector('[data-new-payment]').addEventListener('click', () => actions.openPaymentModal());
-  root.querySelector('[data-export]').addEventListener('click', () => {
+  root.querySelector<HTMLElement>('[data-new-payment]')!.addEventListener('click', () => actions.openPaymentModal());
+  root.querySelector<HTMLElement>('[data-export]')!.addEventListener('click', () => {
     actions.exportCSV({
       filename: 'cobros.csv',
       title: 'Exportar cobros',
@@ -191,20 +205,20 @@ export function render(root, ctx) {
       }),
     });
   });
-  root.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', () => actions.openReceipt(btn.dataset.receipt)));
-  root.querySelectorAll('[data-edit]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-receipt]').forEach((btn) => btn.addEventListener('click', () => actions.openReceipt(btn.dataset.receipt || '')));
+  root.querySelectorAll<HTMLElement>('[data-edit]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const payment = state.db.payments.find((p) => p.id === btn.dataset.edit);
       if (payment) actions.openPaymentEdit(payment);
     });
   });
-  root.querySelectorAll('[data-delete]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-delete]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const payment = state.db.payments.find((p) => p.id === btn.dataset.delete);
       if (payment) actions.deletePaymentFlow(payment);
     });
   });
-  root.querySelectorAll('[data-loan]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-loan]').forEach((btn) => {
     if (btn.dataset.loan) btn.addEventListener('click', () => navigate(`loan/${btn.dataset.loan}`));
   });
 }

@@ -34,22 +34,23 @@ import {
 } from '../lib/ui.js';
 import { navigate } from '../lib/nav.js';
 import * as actions from '../actions.js';
+import type { ViewContext } from '../types.js';
 
-function greeting() {
+function greeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return 'Buenos días';
   if (hour < 19) return 'Buenas tardes';
   return 'Buenas noches';
 }
 
-function daysPhrase(days) {
+function daysPhrase(days: number): string {
   if (days === 0) return 'vence hoy';
   if (days === 1) return 'mañana';
   if (days < 0) return `${Math.abs(days)} días de atraso`;
   return `en ${days} días`;
 }
 
-export function render(root, ctx) {
+export function render(root: HTMLElement, ctx: ViewContext): void {
   const today = todayISO();
   const views = loanViews();
   const summary = portfolioSummary(views);
@@ -436,25 +437,25 @@ export function render(root, ctx) {
   bindActions(root, ctx);
 }
 
-function bindActions(root, ctx) {
-  root.querySelectorAll('[data-go]').forEach((btn) => {
+function bindActions(root: HTMLElement, ctx: ViewContext): void {
+  root.querySelectorAll<HTMLElement>('[data-go]').forEach((btn) => {
     btn.addEventListener('click', (event) => {
       event.stopPropagation();
-      navigate(btn.dataset.go);
+      navigate(btn.dataset.go || 'dashboard');
     });
   });
-  root.querySelectorAll('[data-loan]').forEach((el) => {
+  root.querySelectorAll<HTMLElement>('[data-loan]').forEach((el) => {
     el.addEventListener('click', () => navigate(`loan/${el.dataset.loan}`));
   });
-  root.querySelectorAll('[data-client]').forEach((el) => {
+  root.querySelectorAll<HTMLElement>('[data-client]').forEach((el) => {
     el.addEventListener('click', () => {
       if (el.dataset.client) navigate(`client/${el.dataset.client}`);
     });
   });
-  root.querySelectorAll('[data-receipt]').forEach((el) => {
-    el.addEventListener('click', () => actions.openReceipt(el.dataset.receipt));
+  root.querySelectorAll<HTMLElement>('[data-receipt]').forEach((el) => {
+    el.addEventListener('click', () => actions.openReceipt(el.dataset.receipt || ''));
   });
-  root.querySelectorAll('[data-action]').forEach((el) => {
+  root.querySelectorAll<HTMLElement>('[data-action]').forEach((el) => {
     el.addEventListener('click', () => {
       switch (el.dataset.action) {
         case 'new-loan':

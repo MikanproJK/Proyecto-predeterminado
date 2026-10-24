@@ -1,12 +1,33 @@
 /* Datos de demostración coherentes con la fecha actual */
 
 import { uid, todayISO, addDaysISO, addMonthsISO, buildSchedule, round2 } from './finance.js';
+import type {
+  Amortization,
+  Client,
+  Database,
+  Frequency,
+  LateFeeType,
+  Loan,
+  Payment,
+  RateType,
+  Transaction,
+} from './types.js';
 
-function pad(n, size = 4) {
+function pad(n: number, size = 4): string {
   return String(n).padStart(size, '0');
 }
 
-const CLIENTS = [
+interface DemoClientSeed {
+  name: string;
+  phone: string;
+  email: string;
+  doc: string;
+  address: string;
+  type: 'regular' | 'temporary';
+  notes: string;
+}
+
+const CLIENTS: DemoClientSeed[] = [
   {
     name: 'Ana Torres',
     phone: '+1 555 0142',
@@ -81,12 +102,33 @@ const CLIENTS = [
   },
 ];
 
-export function demoDatabase(defaults) {
+interface DemoLoanSpec {
+  client: number;
+  principal: number;
+  interestRate: number;
+  rateType: RateType;
+  amortization: Amortization;
+  frequency: Frequency;
+  installments: number;
+  startDate: string;
+  firstDueDate: string;
+  lateFeeType: LateFeeType;
+  lateFeeValue: number;
+  graceDays: number;
+  notes: string;
+  guarantee: string;
+  paidCount: number;
+  delayDays: number;
+  partialIndexes?: number[];
+  skipIndexes?: number[];
+}
+
+export function demoDatabase(defaults?: Database): Database {
   const today = todayISO();
-  const clients = [];
-  const loans = [];
-  const payments = [];
-  const transactions = [];
+  const clients: Client[] = [];
+  const loans: Loan[] = [];
+  const payments: Payment[] = [];
+  const transactions: Transaction[] = [];
 
   CLIENTS.forEach((client, index) => {
     clients.push({
@@ -105,7 +147,7 @@ export function demoDatabase(defaults) {
     });
   });
 
-  const specs = [
+  const specs: DemoLoanSpec[] = [
     {
       client: 0,
       principal: 1500,
@@ -261,7 +303,7 @@ export function demoDatabase(defaults) {
   specs.forEach((spec, index) => {
     const client = clients[spec.client];
     const loanId = `loan_demo_${index + 1}`;
-    const loan = {
+    const loan: Loan = {
       id: loanId,
       code: `P-${pad(index + 1)}`,
       clientId: client.id,
@@ -314,7 +356,7 @@ export function demoDatabase(defaults) {
       if (amount <= 0.01) return;
       const date = addDaysISO(row.dueDate, Math.min(spec.delayDays || 0, 0) + (i % 3 === 0 ? 0 : 1));
       const payDate = date > today ? today : date;
-      const payment = {
+      const payment: Payment = {
         id: uid('pay'),
         receipt: `REC-${pad(receiptCounter)}`,
         loanId,
@@ -381,8 +423,8 @@ export function demoDatabase(defaults) {
     auto: false,
   });
 
-  const db = {
-    ...(defaults ? JSON.parse(JSON.stringify(defaults)) : {}),
+  return {
+    ...(defaults ? (JSON.parse(JSON.stringify(defaults)) as Database) : ({} as Database)),
     version: 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -418,6 +460,4 @@ export function demoDatabase(defaults) {
       expense: ['Préstamo otorgado', 'Operativo', 'Personal', 'Servicios', 'Retiro', 'Otro egreso'],
     },
   };
-
-  return db;
 }

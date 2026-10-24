@@ -22,10 +22,17 @@ import {
 } from '../lib/ui.js';
 import { navigate } from '../lib/nav.js';
 import * as actions from '../actions.js';
+import type { Client, LoanScheduleRow, LoanView, ViewContext } from '../types.js';
 
-const filters = { query: '', type: 'all', mode: 'cards' };
+interface ClientFilters {
+  query: string;
+  type: string;
+  mode: string;
+}
 
-export function render(root, ctx) {
+const filters: ClientFilters = { query: '', type: 'all', mode: 'cards' };
+
+export function render(root: HTMLElement, ctx: ViewContext): void {
   if (ctx.id) {
     renderDetail(root, ctx);
     return;
@@ -34,7 +41,7 @@ export function render(root, ctx) {
   const allViews = loanViews();
   const clients = [...state.db.clients].sort((a, b) => a.name.localeCompare(b.name, 'es'));
 
-  const summarize = (client) => {
+  const summarize = (client: Client) => {
     const loans = allViews.filter((loan) => loan.clientId === client.id);
     const active = loans.filter((loan) => ['active', 'overdue'].includes(loan.state));
     return {
@@ -140,9 +147,9 @@ export function render(root, ctx) {
     <div id="clients-content"></div>
   </div>`;
 
-  const content = root.querySelector('#clients-content');
+  const content = root.querySelector<HTMLElement>('#clients-content')!;
 
-  const paint = () => {
+  const paint = (): void => {
     const list = filtered();
     if (!state.db.clients.length) {
       content.innerHTML = `<div class="card"><div class="card-body">${emptyState({
@@ -218,59 +225,59 @@ export function render(root, ctx) {
     bindContent(content);
   };
 
-  const syncChips = () => {
-    root.querySelectorAll('[data-chip]').forEach((chip) => {
+  const syncChips = (): void => {
+    root.querySelectorAll<HTMLElement>('[data-chip]').forEach((chip) => {
       chip.classList.toggle('is-active', chip.dataset.chip === filters.type);
     });
   };
 
-  root.querySelector('#client-search').addEventListener('input', (event) => {
-    filters.query = event.target.value;
+  root.querySelector<HTMLInputElement>('#client-search')!.addEventListener('input', (event) => {
+    filters.query = (event.target as HTMLInputElement).value;
     paint();
   });
-  root.querySelectorAll('[data-chip]').forEach((chip) => {
+  root.querySelectorAll<HTMLElement>('[data-chip]').forEach((chip) => {
     chip.addEventListener('click', () => {
-      filters.type = chip.dataset.chip;
+      filters.type = chip.dataset.chip || 'all';
       syncChips();
       paint();
     });
   });
-  root.querySelectorAll('[data-segmented="client-mode"] [data-value]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-segmented="client-mode"] [data-value]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      filters.mode = btn.dataset.value;
-      root.querySelectorAll('[data-segmented="client-mode"] [data-value]').forEach((el) => {
+      filters.mode = btn.dataset.value || 'cards';
+      root.querySelectorAll<HTMLElement>('[data-segmented="client-mode"] [data-value]').forEach((el) => {
         el.classList.toggle('is-active', el.dataset.value === filters.mode);
       });
       paint();
     });
   });
-  root.querySelector('[data-new-client]').addEventListener('click', () => actions.openClientForm());
+  root.querySelector<HTMLElement>('[data-new-client]')!.addEventListener('click', () => actions.openClientForm());
   paint();
 
-  function bindContent(scope) {
-    scope.querySelectorAll('[data-client]').forEach((el) => {
-      el.addEventListener('click', () => navigate(`client/${el.dataset.client}`));
+  function bindContent(scope: HTMLElement): void {
+    scope.querySelectorAll<HTMLElement>('[data-client]').forEach((el) => {
+      el.addEventListener('click', () => navigate(`client/${el.dataset.client || ''}`));
     });
-    scope.querySelectorAll('[data-edit]').forEach((el) => {
+    scope.querySelectorAll<HTMLElement>('[data-edit]').forEach((el) => {
       el.addEventListener('click', (event) => {
         event.stopPropagation();
         actions.openClientForm({ clientId: el.dataset.edit });
       });
     });
-    scope.querySelectorAll('[data-loan-new]').forEach((el) => {
+    scope.querySelectorAll<HTMLElement>('[data-loan-new]').forEach((el) => {
       el.addEventListener('click', (event) => {
         event.stopPropagation();
         actions.openLoanForm({ clientId: el.dataset.loanNew });
       });
     });
-    scope.querySelectorAll('[data-new-client]').forEach((el) => {
+    scope.querySelectorAll<HTMLElement>('[data-new-client]').forEach((el) => {
       el.addEventListener('click', () => actions.openClientForm());
     });
-    scope.querySelectorAll('[data-clear-filters]').forEach((el) => {
+    scope.querySelectorAll<HTMLElement>('[data-clear-filters]').forEach((el) => {
       el.addEventListener('click', () => {
         filters.query = '';
         filters.type = 'all';
-        const input = root.querySelector('#client-search');
+        const input = root.querySelector<HTMLInputElement>('#client-search')!;
         if (input) input.value = '';
         syncChips();
         paint();
@@ -283,7 +290,7 @@ export function render(root, ctx) {
    Ficha del cliente
    ============================================================ */
 
-function renderDetail(root, ctx) {
+function renderDetail(root: HTMLElement, ctx: ViewContext): void {
   const client = getClient(ctx.id);
   if (!client) {
     root.innerHTML = `<div class="page"><div class="card"><div class="card-body">${emptyState({
@@ -292,7 +299,7 @@ function renderDetail(root, ctx) {
       iconName: 'user',
       action: `<button class="btn btn-primary" type="button" data-back>${icon('arrow-left', 16)} Volver a clientes</button>`,
     })}</div></div></div>`;
-    root.querySelector('[data-back]').addEventListener('click', () => navigate('clients'));
+    root.querySelector<HTMLElement>('[data-back]')!.addEventListener('click', () => navigate('clients'));
     return;
   }
 
@@ -305,7 +312,7 @@ function renderDetail(root, ctx) {
   const activeLoans = loans.filter((loan) => ['active', 'overdue'].includes(loan.state));
   const nextDue = activeLoans
     .map((loan) => ({ loan, row: loan.rows.find((row) => row.remaining > 0.004) }))
-    .filter((item) => item.row)
+    .filter((item): item is { loan: LoanView; row: LoanScheduleRow } => !!item.row)
     .sort((a, b) => String(a.row.dueDate).localeCompare(String(b.row.dueDate)))[0];
 
   root.innerHTML = `<div class="page">
@@ -455,15 +462,15 @@ function renderDetail(root, ctx) {
     </section>
   </div>`;
 
-  root.querySelector('[data-back]').addEventListener('click', () => navigate('clients'));
-  root.querySelectorAll('[data-new-loan]').forEach((btn) => btn.addEventListener('click', () => actions.openLoanForm({ clientId: client.id })));
-  root.querySelector('[data-edit]').addEventListener('click', () => actions.openClientForm({ clientId: client.id }));
-  root.querySelector('[data-delete]').addEventListener('click', () => actions.deleteClientFlow(client));
-  root.querySelector('[data-all-payments]').addEventListener('click', () => navigate('payments'));
-  const payBtn = root.querySelector('[data-new-payment]');
+  root.querySelector<HTMLElement>('[data-back]')!.addEventListener('click', () => navigate('clients'));
+  root.querySelectorAll<HTMLElement>('[data-new-loan]').forEach((btn) => btn.addEventListener('click', () => actions.openLoanForm({ clientId: client.id })));
+  root.querySelector<HTMLElement>('[data-edit]')!.addEventListener('click', () => actions.openClientForm({ clientId: client.id }));
+  root.querySelector<HTMLElement>('[data-delete]')!.addEventListener('click', () => actions.deleteClientFlow(client));
+  root.querySelector<HTMLElement>('[data-all-payments]')!.addEventListener('click', () => navigate('payments'));
+  const payBtn = root.querySelector<HTMLElement>('[data-new-payment]')!;
   if (payBtn) {
     payBtn.addEventListener('click', () => actions.openPaymentModal({ clientId: client.id }));
   }
-  root.querySelectorAll('[data-loan]').forEach((el) => el.addEventListener('click', () => navigate(`loan/${el.dataset.loan}`)));
-  root.querySelectorAll('[data-receipt]').forEach((el) => el.addEventListener('click', () => actions.openReceipt(el.dataset.receipt)));
+  root.querySelectorAll<HTMLElement>('[data-loan]').forEach((el) => el.addEventListener('click', () => navigate(`loan/${el.dataset.loan || ''}`)));
+  root.querySelectorAll<HTMLElement>('[data-receipt]').forEach((el) => el.addEventListener('click', () => actions.openReceipt(el.dataset.receipt || '')));
 }

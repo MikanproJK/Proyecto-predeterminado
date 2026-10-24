@@ -1,12 +1,17 @@
-'use strict';
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu } from 'electron';
+import path from 'node:path';
+import fsp from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import type {
+  Account,
+  Categories,
+  Database,
+  OverlayColors,
+  SaveTextPayload,
+  Settings,
+} from './src/types.js' with { 'resolution-mode': 'import' };
 
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, Menu } = require('electron');
-const path = require('node:path');
-const fs = require('node:fs');
-const fsp = require('node:fs/promises');
-const { pathToFileURL } = require('node:url');
-
-const SRC_DIR = path.join(__dirname, 'src');
+const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 const IS_DEV = process.argv.includes('--dev');
 
 protocol.registerSchemesAsPrivileged([
@@ -22,14 +27,19 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-let mainWindow = null;
-let lastOverlay = { color: '#f3f5fb', symbolColor: '#3b4252' };
+interface OverlayState {
+  color: string;
+  symbolColor: string;
+}
 
-function dataFilePath() {
+let mainWindow: BrowserWindow | null = null;
+let lastOverlay: OverlayState = { color: '#f3f5fb', symbolColor: '#3b4252' };
+
+function dataFilePath(): string {
   return path.join(app.getPath('userData'), 'prestamos-data.json');
 }
 
-function emptyDatabase() {
+function emptyDatabase(): Database {
   return {
     version: 1,
     createdAt: new Date().toISOString(),
@@ -43,12 +53,14 @@ function emptyDatabase() {
       density: 'comfortable',
       fontScale: 1,
       autoTransactions: true,
-      defaultAccountId: null,
+      defaultAccountId: '',
       lateFeeType: 'percent_daily',
       lateFeeValue: 1,
       graceDays: 0,
       paymentOrder: 'late_interest_principal',
       firstRun: true,
+      loanCounter: 1,
+      receiptCounter: 1,
     },
     clients: [],
     loans: [],
@@ -62,29 +74,35 @@ function emptyDatabase() {
   };
 }
 
-function normalizeDatabase(raw) {
+function normalizeDatabase(raw: unknown): Database {
   const base = emptyDatabase();
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
-  const db = {
-    ...base,
-    ...raw,
-    settings: { ...base.settings, ...(raw.settings || {}) },
-    categories: { ...base.categories, ...(raw.categories || {}) },
+  const source = raw as Partial<Database> & {
+    settings?: Partial<Settings>;
+    categories?: Partial<Categories>;
   };
+  const db: Database = {
+    ...base,
+    ...source,
+    settings: { ...base.settings, ...(source.settings || {}) },
+    categories: { ...base.categories, ...(source.categories || {}) },
+  };
+  const record = db as unknown as Record<string, unknown>;
   for (const key of ['clients', 'loans', 'payments', 'accounts', 'transactions']) {
-    if (!Array.isArray(db[key])) db[key] = [];
+    if (!Array.isArray(record[key])) record[key] = [];
   }
   if (!db.accounts.length) {
-    db.accounts = [
+    const defaults: Account[] = [
       { id: 'acc_cash', name: 'Caja', type: 'cash', openingBalance: 0, color: '#4f8cff' },
       { id: 'acc_bank', name: 'Banco', type: 'bank', openingBalance: 0, color: '#2fbf8f' },
     ];
+    db.accounts = defaults;
   }
   if (!db.settings.defaultAccountId) db.settings.defaultAccountId = db.accounts[0].id;
   return db;
 }
 
-async function readDatabase() {
+async function readDatabase(): Promise<Database> {
   try {
     const text = await fsp.readFile(dataFilePath(), 'utf8');
     return normalizeDatabase(JSON.parse(text));
@@ -95,7 +113,7 @@ async function readDatabase() {
   }
 }
 
-async function writeDatabase(data) {
+async function writeDatabase(data: unknown): Promise<Database> {
   const db = normalizeDatabase(data);
   db.updatedAt = new Date().toISOString();
   const target = dataFilePath();
@@ -106,8 +124,8 @@ async function writeDatabase(data) {
   return db;
 }
 
-async function createWindow() {
-  mainWindow = new BrowserWindow({
+async function createWindow(): Promise<void> {
+  const win = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1060,
@@ -128,30 +146,31 @@ async function createWindow() {
       spellcheck: false,
     },
   });
+  mainWindow = win;
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  win.once('ready-to-show', () => win.show());
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  mainWindow.webContents.on('will-navigate', (event, url) => {
+  win.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('app://bundle/')) event.preventDefault();
   });
 
-  await mainWindow.loadURL('app://bundle/index.html');
-  if (IS_DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
+  await win.loadURL('app://bundle/index.html');
+  if (IS_DEV) win.webContents.openDevTools({ mode: 'detach' });
 }
 
-function registerProtocol() {
+function registerProtocol(): void {
   protocol.handle('app', (request) => {
     try {
       const url = new URL(request.url);
       let relative = decodeURIComponent(url.pathname);
       if (!relative || relative === '/') relative = '/index.html';
-      const resolved = path.normalize(path.join(SRC_DIR, relative));
-      if (!resolved.startsWith(SRC_DIR)) {
+      const resolved = path.normalize(path.join(RENDERER_DIR, relative));
+      if (!resolved.startsWith(RENDERER_DIR)) {
         return new Response('Acceso denegado', { status: 403 });
       }
       return net.fetch(pathToFileURL(resolved).toString());
@@ -162,9 +181,9 @@ function registerProtocol() {
   });
 }
 
-function registerIpc() {
+function registerIpc(): void {
   ipcMain.handle('db:load', () => readDatabase());
-  ipcMain.handle('db:save', async (_event, data) => {
+  ipcMain.handle('db:save', async (_event, data: Database) => {
     const saved = await writeDatabase(data);
     return { ok: true, updatedAt: saved.updatedAt, path: dataFilePath() };
   });
@@ -176,7 +195,7 @@ function registerIpc() {
 
   ipcMain.handle('db:backup', async () => {
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const result = await dialog.showSaveDialog(mainWindow, {
+    const result = await dialog.showSaveDialog(mainWindow!, {
       title: 'Guardar respaldo',
       defaultPath: path.join(app.getPath('documents'), `prestamos-respaldo-${stamp}.json`),
       filters: [{ name: 'Respaldo JSON', extensions: ['json'] }],
@@ -188,14 +207,14 @@ function registerIpc() {
   });
 
   ipcMain.handle('db:restore', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const result = await dialog.showOpenDialog(mainWindow!, {
       title: 'Restaurar respaldo',
       properties: ['openFile'],
       filters: [{ name: 'Respaldo JSON', extensions: ['json'] }],
     });
     if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true };
     const text = await fsp.readFile(result.filePaths[0], 'utf8');
-    const parsed = JSON.parse(text);
+    const parsed = JSON.parse(text) as Partial<Database> | null;
     if (!parsed || !Array.isArray(parsed.clients) || !Array.isArray(parsed.loans)) {
       throw new Error('El archivo no parece ser un respaldo válido de Préstamos Pro.');
     }
@@ -203,8 +222,9 @@ function registerIpc() {
     return { ok: true, data: saved, path: result.filePaths[0] };
   });
 
-  ipcMain.handle('file:save-text', async (_event, { title, defaultName, content, filters }) => {
-    const result = await dialog.showSaveDialog(mainWindow, {
+  ipcMain.handle('file:save-text', async (_event, payload: SaveTextPayload) => {
+    const { title, defaultName, content, filters } = payload;
+    const result = await dialog.showSaveDialog(mainWindow!, {
       title: title || 'Guardar archivo',
       defaultPath: path.join(app.getPath('documents'), defaultName || 'export.csv'),
       filters: filters || [
@@ -217,7 +237,7 @@ function registerIpc() {
     return { ok: true, path: result.filePath };
   });
 
-  ipcMain.handle('window:overlay', (_event, colors) => {
+  ipcMain.handle('window:overlay', (_event, colors: OverlayColors | null) => {
     if (!colors) return false;
     lastOverlay = {
       color: colors.color || lastOverlay.color,

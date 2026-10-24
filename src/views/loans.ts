@@ -26,10 +26,17 @@ import {
 } from '../lib/ui.js';
 import { navigate } from '../lib/nav.js';
 import * as actions from '../actions.js';
+import type { LoanScheduleRow, LoanView, ViewContext } from '../types.js';
 
-const filters = { query: '', state: 'all', mode: 'cards' };
+interface LoanFilters {
+  query: string;
+  state: string;
+  mode: string;
+}
 
-function stateLabel(row) {
+const filters: LoanFilters = { query: '', state: 'all', mode: 'cards' };
+
+function stateLabel(row: LoanScheduleRow): [string, string] {
   switch (row.state) {
     case 'paid':
       return ['Pagada', 'success'];
@@ -46,11 +53,11 @@ function stateLabel(row) {
   }
 }
 
-function nextRow(loan) {
+function nextRow(loan: LoanView): LoanScheduleRow | null {
   return loan.rows.find((row) => row.remaining > 0.004) || null;
 }
 
-export function render(root, ctx) {
+export function render(root: HTMLElement, ctx: ViewContext): void {
   if (ctx.id) {
     renderDetail(root, ctx);
     return;
@@ -78,7 +85,7 @@ export function render(root, ctx) {
           .some((value) => String(value).toLowerCase().includes(query));
       })
       .sort((a, b) => {
-        const rank = (state) => (state === 'overdue' ? 0 : state === 'active' ? 1 : state === 'paid' ? 2 : 3);
+        const rank = (state: string): number => (state === 'overdue' ? 0 : state === 'active' ? 1 : state === 'paid' ? 2 : 3);
         return rank(a.state) - rank(b.state) || String(b.startDate).localeCompare(String(a.startDate));
       });
   };
@@ -132,9 +139,9 @@ export function render(root, ctx) {
     <div id="loans-content"></div>
   </div>`;
 
-  const content = root.querySelector('#loans-content');
+  const content = root.querySelector<HTMLElement>('#loans-content')!;
 
-  const paint = () => {
+  const paint = (): void => {
     const list = filtered();
     if (!state.db.loans.length) {
       content.innerHTML = `<div class="card"><div class="card-body">${emptyState({
@@ -222,34 +229,34 @@ export function render(root, ctx) {
     bindContent(content);
   };
 
-  const syncChips = () => {
-    root.querySelectorAll('[data-chip]').forEach((chip) => {
+  const syncChips = (): void => {
+    root.querySelectorAll<HTMLElement>('[data-chip]').forEach((chip) => {
       chip.classList.toggle('is-active', chip.dataset.chip === filters.state);
     });
   };
 
-  root.querySelector('#loan-search').addEventListener('input', (event) => {
-    filters.query = event.target.value;
+  root.querySelector<HTMLInputElement>('#loan-search')!.addEventListener('input', (event) => {
+    filters.query = (event.target as HTMLInputElement).value;
     paint();
   });
-  root.querySelectorAll('[data-chip]').forEach((chip) => {
+  root.querySelectorAll<HTMLElement>('[data-chip]').forEach((chip) => {
     chip.addEventListener('click', () => {
-      filters.state = chip.dataset.chip;
+      filters.state = chip.dataset.chip || 'all';
       syncChips();
       paint();
     });
   });
-  root.querySelectorAll('[data-segmented="loan-mode"] [data-value]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-segmented="loan-mode"] [data-value]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      filters.mode = btn.dataset.value;
-      root.querySelectorAll('[data-segmented="loan-mode"] [data-value]').forEach((el) => {
+      filters.mode = btn.dataset.value || 'cards';
+      root.querySelectorAll<HTMLElement>('[data-segmented="loan-mode"] [data-value]').forEach((el) => {
         el.classList.toggle('is-active', el.dataset.value === filters.mode);
       });
       paint();
     });
   });
-  root.querySelector('[data-new-loan]').addEventListener('click', () => actions.openLoanForm());
-  root.querySelector('[data-export]').addEventListener('click', () => {
+  root.querySelector<HTMLElement>('[data-new-loan]')!.addEventListener('click', () => actions.openLoanForm());
+  root.querySelector<HTMLElement>('[data-export]')!.addEventListener('click', () => {
     const rows = filtered().map((loan) => {
       const client = getClient(loan.clientId);
       return [
@@ -273,28 +280,28 @@ export function render(root, ctx) {
   });
   paint();
 
-  function bindContent(scope) {
-    scope.querySelectorAll('[data-loan]').forEach((el) => {
-      el.addEventListener('click', () => navigate(`loan/${el.dataset.loan}`));
+  function bindContent(scope: HTMLElement): void {
+    scope.querySelectorAll<HTMLElement>('[data-loan]').forEach((el) => {
+      el.addEventListener('click', () => navigate(`loan/${el.dataset.loan || ''}`));
     });
-    scope.querySelectorAll('[data-new-loan]').forEach((el) => el.addEventListener('click', () => actions.openLoanForm()));
-    scope.querySelectorAll('[data-pay]').forEach((el) => {
+    scope.querySelectorAll<HTMLElement>('[data-new-loan]').forEach((el) => el.addEventListener('click', () => actions.openLoanForm()));
+    scope.querySelectorAll<HTMLElement>('[data-pay]').forEach((el) => {
       el.addEventListener('click', (event) => {
         event.stopPropagation();
         actions.openPaymentModal({ loanId: el.dataset.pay });
       });
     });
-    scope.querySelectorAll('[data-edit]').forEach((el) => {
+    scope.querySelectorAll<HTMLElement>('[data-edit]').forEach((el) => {
       el.addEventListener('click', (event) => {
         event.stopPropagation();
         actions.openLoanForm({ loanId: el.dataset.edit });
       });
     });
-    scope.querySelectorAll('[data-clear]').forEach((el) => {
+    scope.querySelectorAll<HTMLElement>('[data-clear]').forEach((el) => {
       el.addEventListener('click', () => {
         filters.query = '';
         filters.state = 'all';
-        const input = root.querySelector('#loan-search');
+        const input = root.querySelector<HTMLInputElement>('#loan-search')!;
         if (input) input.value = '';
         syncChips();
         paint();
@@ -307,7 +314,7 @@ export function render(root, ctx) {
    Detalle del préstamo
    ============================================================ */
 
-function renderDetail(root, ctx) {
+function renderDetail(root: HTMLElement, ctx: ViewContext): void {
   const loan = loanViews().find((item) => item.id === ctx.id);
   if (!loan) {
     root.innerHTML = `<div class="page"><div class="card"><div class="card-body">${emptyState({
@@ -316,7 +323,7 @@ function renderDetail(root, ctx) {
       iconName: 'credit-card',
       action: `<button class="btn btn-primary" type="button" data-back>${icon('arrow-left', 16)} Volver a préstamos</button>`,
     })}</div></div></div>`;
-    root.querySelector('[data-back]').addEventListener('click', () => navigate('loans'));
+    root.querySelector<HTMLElement>('[data-back]')!.addEventListener('click', () => navigate('loans'));
     return;
   }
 
@@ -534,15 +541,15 @@ function renderDetail(root, ctx) {
     </section>
   </div>`;
 
-  root.querySelector('[data-back]').addEventListener('click', () => navigate('loans'));
-  root.querySelector('[data-client]')?.addEventListener('click', () => navigate(`client/${loan.clientId}`));
-  root.querySelectorAll('[data-pay]').forEach((btn) => btn.addEventListener('click', () => actions.openPaymentModal({ loanId: loan.id })));
-  root.querySelector('[data-edit]').addEventListener('click', () => actions.openLoanForm({ loanId: loan.id }));
-  root.querySelectorAll('[data-contract]').forEach((btn) => btn.addEventListener('click', () => actions.openContract(loan.id)));
-  root.querySelector('[data-delete]').addEventListener('click', () => actions.deleteLoanFlow(loan));
-  root.querySelector('[data-cancel]')?.addEventListener('click', () => actions.cancelLoanFlow(loan));
-  root.querySelector('[data-reactivate]')?.addEventListener('click', () => actions.reactivateLoanFlow(loan));
-  root.querySelector('[data-export-schedule]').addEventListener('click', () => {
+  root.querySelector<HTMLElement>('[data-back]')!.addEventListener('click', () => navigate('loans'));
+  root.querySelector<HTMLElement>('[data-client]')!?.addEventListener('click', () => navigate(`client/${loan.clientId}`));
+  root.querySelectorAll<HTMLElement>('[data-pay]').forEach((btn) => btn.addEventListener('click', () => actions.openPaymentModal({ loanId: loan.id })));
+  root.querySelector<HTMLElement>('[data-edit]')!.addEventListener('click', () => actions.openLoanForm({ loanId: loan.id }));
+  root.querySelectorAll<HTMLElement>('[data-contract]').forEach((btn) => btn.addEventListener('click', () => actions.openContract(loan.id)));
+  root.querySelector<HTMLElement>('[data-delete]')!.addEventListener('click', () => actions.deleteLoanFlow(loan));
+  root.querySelector<HTMLElement>('[data-cancel]')!?.addEventListener('click', () => actions.cancelLoanFlow(loan));
+  root.querySelector<HTMLElement>('[data-reactivate]')!?.addEventListener('click', () => actions.reactivateLoanFlow(loan));
+  root.querySelector<HTMLElement>('[data-export-schedule]')!.addEventListener('click', () => {
     actions.exportCSV({
       filename: `${loan.code}-plan-de-pagos.csv`,
       title: 'Exportar plan de pagos',
@@ -559,14 +566,14 @@ function renderDetail(root, ctx) {
       ]),
     });
   });
-  root.querySelectorAll('[data-receipt]').forEach((btn) => btn.addEventListener('click', () => actions.openReceipt(btn.dataset.receipt)));
-  root.querySelectorAll('[data-pay-edit]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-receipt]').forEach((btn) => btn.addEventListener('click', () => actions.openReceipt(btn.dataset.receipt || '')));
+  root.querySelectorAll<HTMLElement>('[data-pay-edit]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const payment = state.db.payments.find((p) => p.id === btn.dataset.payEdit);
       if (payment) actions.openPaymentEdit(payment);
     });
   });
-  root.querySelectorAll('[data-pay-delete]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-pay-delete]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const payment = state.db.payments.find((p) => p.id === btn.dataset.payDelete);
       if (payment) actions.deletePaymentFlow(payment);

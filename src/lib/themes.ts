@@ -1,4 +1,22 @@
-export const THEMES = [
+import type { Density, ThemeId, ThemeMode } from '../types.js';
+
+export interface ThemeMeta {
+  id: ThemeId;
+  name: string;
+  hint: string;
+  mode: ThemeMode;
+  bg: string;
+  ink: string;
+  swatch: string;
+  colors: [string, string, string];
+}
+
+export interface OptionMeta<T extends string = string> {
+  value: T;
+  label: string;
+}
+
+export const THEMES: readonly ThemeMeta[] = [
   {
     id: 'aurora',
     name: 'Aurora',
@@ -71,16 +89,16 @@ export const THEMES = [
   },
 ];
 
-export function themeMeta(id) {
+export function themeMeta(id?: string | null): ThemeMeta {
   return THEMES.find((theme) => theme.id === id) || THEMES[0];
 }
 
-export const DENSITIES = [
+export const DENSITIES: readonly OptionMeta<Density>[] = [
   { value: 'comfortable', label: 'Cómoda' },
   { value: 'compact', label: 'Compacta' },
 ];
 
-export const CURRENCIES = [
+export const CURRENCIES: readonly OptionMeta[] = [
   { value: 'USD', label: 'USD · Dólar estadounidense' },
   { value: 'EUR', label: 'EUR · Euro' },
   { value: 'MXN', label: 'MXN · Peso mexicano' },
@@ -101,7 +119,7 @@ export const CURRENCIES = [
   { value: 'VES', label: 'VES · Bolívar' },
 ];
 
-export const LOCALES = [
+export const LOCALES: readonly OptionMeta[] = [
   { value: 'es-419', label: 'Español (Latinoamérica)' },
   { value: 'es-MX', label: 'Español (México)' },
   { value: 'es-CO', label: 'Español (Colombia)' },

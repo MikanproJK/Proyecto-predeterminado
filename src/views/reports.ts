@@ -37,13 +37,85 @@ import {
   legend,
   progressBar,
 } from '../lib/ui.js';
+import type { ChartPoint, DonutSegment } from '../lib/ui.js';
 import { navigate } from '../lib/nav.js';
 import * as actions from '../actions.js';
+import type {
+  AccountWithBalance,
+  Client,
+  Loan,
+  LoanView,
+  MonthlyBucket,
+  Payment,
+  PortfolioSummary,
+  Transaction,
+  TransactionsSummary,
+  ViewContext,
+} from '../types.js';
 
-const filters = { range: 'month', tab: 'overview' };
+interface ReportFilters {
+  range: string;
+  tab: string;
+}
+
+interface RangeBounds {
+  from: string;
+  to: string;
+  label: string;
+}
+
+interface PeriodAllocation {
+  late: number;
+  charges: number;
+  interest: number;
+  capital: number;
+  applied: number;
+}
+
+interface ReportClientRow {
+  client: Client | null;
+  loans: number;
+  principal: number;
+  paid: number;
+  balance: number;
+  late: number;
+  overdue: number;
+  lastPayment: string | null;
+}
+
+interface ReportData {
+  bounds: RangeBounds;
+  today: string;
+  views: LoanView[];
+  activeViews: LoanView[];
+  portfolio: PortfolioSummary;
+  accounts: AccountWithBalance[];
+  cash: number;
+  payments: Payment[];
+  paymentTotal: number;
+  paymentAverage: number;
+  transactions: Transaction[];
+  cashSummary: TransactionsSummary;
+  newLoans: Loan[];
+  disbursed: number;
+  allocation: PeriodAllocation;
+  profit: number;
+  cashSeries: MonthlyBucket[];
+  collectionPoints: ChartPoint[];
+  clientRows: ReportClientRow[];
+  loanRows: LoanView[];
+  composition: DonutSegment[];
+  expenseSegments: DonutSegment[];
+  incomeSegments: DonutSegment[];
+  net: number;
+  margin: number;
+  coverage: number;
+}
+
+const filters: ReportFilters = { range: 'month', tab: 'overview' };
 const CATEGORY_COLORS = ['var(--primary)', 'var(--accent)', 'var(--info)', 'var(--warning)', 'var(--danger)', 'var(--success)'];
 
-function rangeBounds(range) {
+function rangeBounds(range: string): RangeBounds {
   const today = todayISO();
   const monthStart = `${today.slice(0, 8)}01`;
   switch (range) {
@@ -67,7 +139,7 @@ function rangeBounds(range) {
 /* Reparte los pagos del período en mora, cargos, interés y capital usando el
    mismo motor que el resto de la aplicación. Se compara el acumulado al final
    del rango contra el acumulado al día anterior al inicio. */
-function periodAllocation(from, to) {
+function periodAllocation(from: string, to: string): PeriodAllocation {
   const asOf = to || todayISO();
   const before = from ? addDaysISO(from, -1) : null;
   const totals = { late: 0, charges: 0, interest: 0, capital: 0, applied: 0 };
@@ -96,8 +168,8 @@ function periodAllocation(from, to) {
   };
 }
 
-function categorySegments(transactions, type) {
-  const map = new Map();
+function categorySegments(transactions: readonly Transaction[], type: string): DonutSegment[] {
+  const map = new Map<string, number>();
   for (const tx of transactions) {
     if (tx.type !== type) continue;
     const key = tx.category || (type === 'income' ? 'Otro ingreso' : 'Otro egreso');
@@ -109,7 +181,7 @@ function categorySegments(transactions, type) {
     .map(([label, value], index) => ({ label, value, color: CATEGORY_COLORS[index % CATEGORY_COLORS.length] }));
 }
 
-function collect() {
+function collect(): ReportData {
   const bounds = rangeBounds(filters.range);
   const today = todayISO();
   const views = loanViews();
@@ -118,7 +190,7 @@ function collect() {
   const accounts = accountBalances();
   const cash = round2(sum(accounts, (account) => account.balance));
 
-  const inRange = (date) => (!bounds.from || date >= bounds.from) && (!bounds.to || date <= bounds.to);
+  const inRange = (date: string): boolean => (!bounds.from || date >= bounds.from) && (!bounds.to || date <= bounds.to);
 
   const payments = state.db.payments.filter((payment) => inRange(payment.date));
   const paymentTotal = round2(sum(payments, (payment) => payment.amount));
@@ -141,7 +213,7 @@ function collect() {
   const collectionSeries = monthlySeries(state.db.payments, { months });
   const collectionPoints = collectionSeries.map((bucket) => ({ label: bucket.label, value: bucket.income }));
 
-  const clientMap = new Map();
+  const clientMap = new Map<string, ReportClientRow>();
   for (const loan of activeViews) {
     const current = clientMap.get(loan.clientId) || {
       client: getClient(loan.clientId),
@@ -216,7 +288,7 @@ function collect() {
 
 /* ---------- bloques de interfaz ---------- */
 
-function summaryStrip(data) {
+function summaryStrip(data: ReportData): string {
   return `<div class="summary-strip mb-2">
     <div><span>Cobrado · ${esc(data.bounds.label)}</span><strong class="money--income">${money(data.paymentTotal)}</strong></div>
     <div><span>Interés + mora cobrados</span><strong class="money--income">${money(data.profit)}</strong></div>
@@ -227,7 +299,7 @@ function summaryStrip(data) {
   </div>`;
 }
 
-function overviewTab(data) {
+function overviewTab(data: ReportData): string {
   const hasMovements = data.cashSeries.some((bucket) => bucket.income > 0 || bucket.expense > 0);
   const hasCollections = data.collectionPoints.some((point) => point.value > 0);
 
@@ -352,7 +424,7 @@ function overviewTab(data) {
     ${topCard}`;
 }
 
-function portfolioTab(data) {
+function portfolioTab(data: ReportData): string {
   const total = data.clientRows.reduce(
     (acc, row) => ({
       loans: acc.loans + row.loans,
@@ -408,7 +480,7 @@ function portfolioTab(data) {
   </div>`;
 }
 
-function profitabilityTab(data) {
+function profitabilityTab(data: ReportData): string {
   const total = data.loanRows.reduce(
     (acc, loan) => ({
       principal: round2(acc.principal + loan.totals.principal),
@@ -470,7 +542,7 @@ function profitabilityTab(data) {
   </div>`;
 }
 
-function reportBody(data) {
+function reportBody(data: ReportData): string {
   if (filters.tab === 'portfolio') return portfolioTab(data);
   if (filters.tab === 'profitability') return profitabilityTab(data);
   return overviewTab(data);
@@ -478,7 +550,7 @@ function reportBody(data) {
 
 /* ---------- exportaciones ---------- */
 
-function exportReport(kind, data) {
+function exportReport(kind: string, data: ReportData): void {
   if (kind === 'portfolio') {
     actions.exportCSV({
       filename: 'cartera-clientes.csv',
@@ -530,7 +602,7 @@ function exportReport(kind, data) {
 
 /* ---------- impresión ---------- */
 
-function printReport() {
+function printReport(): void {
   const data = collect();
   const settings = state.db.settings;
   const company = settings.company || 'Mi Financiera';
@@ -629,7 +701,7 @@ function printReport() {
 
 /* ---------- vista ---------- */
 
-export function render(root) {
+export function render(root: HTMLElement, _ctx: ViewContext): void {
   const data = collect();
   const hasAnyData = state.db.loans.length || state.db.payments.length || state.db.transactions.length;
 
@@ -690,37 +762,37 @@ export function render(root) {
     </div>
   </div>`;
 
-  root.querySelectorAll('[data-segmented="range"] [data-value]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-segmented="range"] [data-value]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      filters.range = btn.dataset.value;
-      render(root);
+      filters.range = btn.dataset.value || 'month';
+      render(root, _ctx);
     });
   });
-  root.querySelectorAll('[data-tab]').forEach((tab) => {
+  root.querySelectorAll<HTMLElement>('[data-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
-      filters.tab = tab.dataset.tab;
-      render(root);
+      filters.tab = tab.dataset.tab || 'overview';
+      render(root, _ctx);
     });
   });
-  root.querySelectorAll('[data-tab-jump]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-tab-jump]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      filters.tab = btn.dataset.tabJump;
-      render(root);
+      filters.tab = btn.dataset.tabJump || 'overview';
+      render(root, _ctx);
     });
   });
-  root.querySelectorAll('[data-export]').forEach((btn) => {
-    btn.addEventListener('click', () => exportReport(btn.dataset.export, data));
+  root.querySelectorAll<HTMLElement>('[data-export]').forEach((btn) => {
+    btn.addEventListener('click', () => exportReport(btn.dataset.export || 'overview', data));
   });
-  root.querySelector('[data-print]').addEventListener('click', printReport);
-  root.querySelectorAll('[data-new-loan]').forEach((btn) => btn.addEventListener('click', () => actions.openLoanForm()));
-  root.querySelectorAll('[data-demo]').forEach((btn) => btn.addEventListener('click', () => actions.loadDemoFlow({ confirm: false })));
-  root.querySelectorAll('[data-client]').forEach((el) => {
+  root.querySelector<HTMLElement>('[data-print]')!.addEventListener('click', printReport);
+  root.querySelectorAll<HTMLElement>('[data-new-loan]').forEach((btn) => btn.addEventListener('click', () => actions.openLoanForm()));
+  root.querySelectorAll<HTMLElement>('[data-demo]').forEach((btn) => btn.addEventListener('click', () => actions.loadDemoFlow({ confirm: false })));
+  root.querySelectorAll<HTMLElement>('[data-client]').forEach((el) => {
     el.addEventListener('click', () => {
       if (el.dataset.client) navigate(`client/${el.dataset.client}`);
     });
   });
-  root.querySelectorAll('[data-loan]').forEach((el) => {
-    el.addEventListener('click', () => navigate(`loan/${el.dataset.loan}`));
+  root.querySelectorAll<HTMLElement>('[data-loan]').forEach((el) => {
+    el.addEventListener('click', () => navigate(`loan/${el.dataset.loan || ''}`));
   });
 }
 

@@ -60,14 +60,43 @@ import {
   badge,
 } from './lib/ui.js';
 import { navigate } from './lib/nav.js';
+import type {
+  Account,
+  AccountInput,
+  Amortization,
+  Client,
+  ClientInput,
+  Frequency,
+  Loan,
+  LoanInput,
+  LoanPatch,
+  LoanTerms,
+  LoanView,
+  Payment,
+  PaymentInput,
+  PaymentPatch,
+  RateType,
+  Transaction,
+  TransactionInput,
+  TransactionPatch,
+  TransferInput,
+} from './types.js';
 
 const T = () => todayISO();
 
-function currency() {
+interface SelectOption {
+  value: string;
+  label: string;
+}
+
+function currency(): string {
   return state.db.settings.currency || 'USD';
 }
 
-function accountOptions(selected, { includeEmpty = false } = {}) {
+function accountOptions(
+  selected: string | null | undefined,
+  { includeEmpty = false }: { includeEmpty?: boolean } = {},
+): SelectOption[] {
   const options = state.db.accounts.map((account) => ({ value: account.id, label: account.name }));
   if (includeEmpty) options.unshift({ value: '', label: 'Sin cuenta' });
   if (!options.some((option) => option.value === selected) && options.length) {
@@ -76,7 +105,7 @@ function accountOptions(selected, { includeEmpty = false } = {}) {
   return options;
 }
 
-function clientOptions(selected) {
+function clientOptions(selected?: string | null): SelectOption[] {
   const list = [...state.db.clients].sort((a, b) => a.name.localeCompare(b.name, 'es'));
   return list.map((client) => ({
     value: client.id,
@@ -84,12 +113,12 @@ function clientOptions(selected) {
   }));
 }
 
-function loanOptions(selected, clientId) {
+function loanOptions(selected?: string | null, clientId?: string | null): SelectOption[] {
   const loans = state.db.loans
     .filter((loan) => loan.status !== 'cancelled' && (!clientId || loan.clientId === clientId))
     .map((loan) => computeLoan(loan, paymentsFor(loan.id), T()))
     .sort((a, b) => {
-      const priority = (state) => (state === 'overdue' ? 0 : state === 'active' ? 1 : 2);
+      const priority = (state: string) => (state === 'overdue' ? 0 : state === 'active' ? 1 : 2);
       return priority(a.state) - priority(b.state) || String(a.code).localeCompare(String(b.code));
     });
   return loans.map((loan) => {
@@ -101,7 +130,11 @@ function loanOptions(selected, clientId) {
   });
 }
 
-function defaultFirstDue(frequency, startDate, customDays) {
+function defaultFirstDue(
+  frequency: string,
+  startDate: string | null | undefined,
+  customDays: number | string | null | undefined,
+): string {
   const start = startDate || T();
   switch (frequency) {
     case 'daily':
@@ -122,7 +155,12 @@ function defaultFirstDue(frequency, startDate, customDays) {
    CLIENTES
    ============================================================ */
 
-export function openClientForm({ clientId = null, onSaved = null } = {}) {
+export interface OpenClientFormOptions {
+  clientId?: string | null;
+  onSaved?: ((client: Client) => void) | null;
+}
+
+export function openClientForm({ clientId = null, onSaved = null }: OpenClientFormOptions = {}): void {
   const existing = clientId ? state.db.clients.find((c) => c.id === clientId) : null;
   const modal = openModal({
     title: existing ? 'Editar cliente' : 'Nuevo cliente',
@@ -171,9 +209,9 @@ export function openClientForm({ clientId = null, onSaved = null } = {}) {
       <button class="btn btn-primary" type="submit" form="client-form">${icon('check', 16)} ${existing ? 'Guardar cambios' : 'Crear cliente'}</button>`,
   });
 
-  const form = modal.body.querySelector('#client-form');
-  const typeSelect = form.querySelector('[name="type"]');
-  const expiryWrap = form.querySelector('[data-expiry]');
+  const form = modal.body.querySelector<HTMLFormElement>('#client-form')!;
+  const typeSelect = form.querySelector<HTMLSelectElement>('[name="type"]')!;
+  const expiryWrap = form.querySelector<HTMLElement>('[data-expiry]')!;
   const syncType = () => expiryWrap.classList.toggle('hidden', typeSelect.value !== 'temporary');
   typeSelect.addEventListener('change', syncType);
   syncType();
@@ -182,12 +220,12 @@ export function openClientForm({ clientId = null, onSaved = null } = {}) {
     event.preventDefault();
     try {
       const data = readForm(form);
-      let saved;
+      let saved: Client;
       if (existing) {
-        saved = updateClient(existing.id, data);
+        saved = updateClient(existing.id, data as unknown as Partial<ClientInput>);
         toast('Cliente actualizado.', 'success');
       } else {
-        saved = addClient(data);
+        saved = addClient(data as unknown as ClientInput);
         toast(`${saved.name} se registró correctamente.`, 'success', 'Cliente creado');
       }
       modal.close();
@@ -198,7 +236,7 @@ export function openClientForm({ clientId = null, onSaved = null } = {}) {
   });
 }
 
-export async function deleteClientFlow(client) {
+export async function deleteClientFlow(client: Client): Promise<void> {
   const loans = state.db.loans.filter((l) => l.clientId === client.id);
   const ok = await confirmDialog({
     title: 'Eliminar cliente',
@@ -223,7 +261,13 @@ export async function deleteClientFlow(client) {
    PRÉSTAMOS
    ============================================================ */
 
-export function openLoanForm({ loanId = null, clientId = null, initial = null } = {}) {
+export interface OpenLoanFormOptions {
+  loanId?: string | null;
+  clientId?: string | null;
+  initial?: Partial<LoanInput> | null;
+}
+
+export function openLoanForm({ loanId = null, clientId = null, initial = null }: OpenLoanFormOptions = {}): void {
   const existing = loanId ? state.db.loans.find((l) => l.id === loanId) : null;
   if (!state.db.clients.length) {
     openModal({
@@ -238,7 +282,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
       footer: `<button class="btn btn-ghost" type="button" data-close>Cancelar</button>
         <button class="btn btn-primary" type="button" data-new-client>${icon('user-plus', 16)} Crear cliente</button>`,
       onMount: ({ root, close }) => {
-        root.querySelector('[data-new-client]').addEventListener('click', () => {
+        root.querySelector<HTMLElement>('[data-new-client]')!.addEventListener('click', () => {
           close();
           setTimeout(() => openClientForm({ onSaved: (client) => openLoanForm({ clientId: client.id }) }), 200);
         });
@@ -351,43 +395,43 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
       <button class="btn btn-primary" type="submit" form="loan-form">${icon('check', 16)} ${existing ? 'Guardar cambios' : 'Crear préstamo'}</button>`,
   });
 
-  const form = modal.body.querySelector('#loan-form');
-  const previewEl = modal.body.querySelector('#loan-preview');
-  const freqSelect = form.querySelector('[name="frequency"]');
-  const customWrap = form.querySelector('[data-custom-days]');
-  const lateSelect = form.querySelector('[name="lateFeeType"]');
-  const lateWrap = form.querySelector('[data-late-value]');
-  const startInput = form.querySelector('[name="startDate"]');
-  const firstDueInput = form.querySelector('[name="firstDueDate"]');
+  const form = modal.body.querySelector<HTMLFormElement>('#loan-form')!;
+  const previewEl = modal.body.querySelector<HTMLElement>('#loan-preview');
+  const freqSelect = form.querySelector<HTMLSelectElement>('[name="frequency"]')!;
+  const customWrap = form.querySelector<HTMLElement>('[data-custom-days]');
+  const lateSelect = form.querySelector<HTMLSelectElement>('[name="lateFeeType"]')!;
+  const lateWrap = form.querySelector<HTMLElement>('[data-late-value]')!;
+  const startInput = form.querySelector<HTMLInputElement>('[name="startDate"]')!;
+  const firstDueInput = form.querySelector<HTMLInputElement>('[name="firstDueDate"]')!;
   let firstDueTouched = false;
 
   const syncConditional = () => {
     if (customWrap) customWrap.classList.toggle('hidden', freqSelect.value !== 'custom');
     lateWrap.classList.toggle('hidden', lateSelect.value === 'none');
-    const suffix = form.querySelector('[data-late-value] .input-affix--suffix');
+    const suffix = form.querySelector<HTMLElement>('[data-late-value] .input-affix--suffix')!;
     if (suffix) suffix.textContent = String(lateSelect.value).startsWith('percent') ? '%' : currency();
   };
 
-  const refreshPreview = () => {
+  const refreshPreview = (): void => {
     if (!previewEl) return;
     const data = readForm(form);
-    const temp = {
+    const temp: LoanTerms = {
       id: 'preview',
       principal: num(data.principal),
       interestRate: num(data.interestRate),
-      rateType: data.rateType,
-      amortization: data.amortization,
-      frequency: data.frequency,
+      rateType: data.rateType as RateType,
+      amortization: data.amortization as Amortization,
+      frequency: data.frequency as Frequency,
       customDays: num(data.customDays) || 15,
       installments: Math.max(1, Math.round(num(data.installments) || 1)),
-      startDate: data.startDate || T(),
-      firstDueDate: data.firstDueDate || data.startDate || T(),
+      startDate: String(data.startDate || T()),
+      firstDueDate: String(data.firstDueDate || data.startDate || T()),
       fees: num(data.fees),
       graceDays: 0,
       lateFeeType: 'none',
       status: 'active',
     };
-    if (!(temp.principal > 0) || !(temp.installments > 0)) {
+    if (!(temp.principal > 0) || !(num(temp.installments) > 0)) {
       previewEl.innerHTML = `<h4>Vista previa</h4><div class="chart-empty" style="height:120px">Completa el monto y las cuotas</div>`;
       return;
     }
@@ -399,7 +443,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
     const client = state.db.clients.find((c) => c.id === data.clientId);
     const freq = FREQUENCIES.find((f) => f.value === data.frequency);
     const warning =
-      data.firstDueDate && data.startDate && data.firstDueDate < data.startDate
+      data.firstDueDate && data.startDate && String(data.firstDueDate) < String(data.startDate)
         ? 'El primer vencimiento es anterior a la fecha de entrega.'
         : '';
 
@@ -413,7 +457,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
       <div class="calc-rows">
         <div class="calc-row"><span>Capital</span><strong>${money(temp.principal)}</strong></div>
         <div class="calc-row"><span>Intereses totales</span><strong>${money(totalInterest)}</strong></div>
-        ${temp.fees > 0 ? `<div class="calc-row"><span>Cargo inicial</span><strong>${money(temp.fees)}</strong></div>` : ''}
+        ${num(temp.fees) > 0 ? `<div class="calc-row"><span>Cargo inicial</span><strong>${money(temp.fees)}</strong></div>` : ''}
         <div class="calc-row calc-row--total"><span>Total a pagar</span><strong>${money(view.totals.toPay)}</strong></div>
         <div class="calc-row"><span>Tasa por período</span><strong>${rate.toFixed(2)}%</strong></div>
         <div class="calc-row"><span>Último vencimiento</span><strong>${last ? formatDate(last.dueDate, 'medium') : '—'}</strong></div>
@@ -439,20 +483,24 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
     firstDueInput.addEventListener('change', () => {
       firstDueTouched = true;
     });
-    const autoFirstDue = () => {
+    const autoFirstDue = (): void => {
       if (firstDueTouched) return;
       const data = readForm(form);
-      firstDueInput.value = defaultFirstDue(freqSelect.value, data.startDate, data.customDays);
+      firstDueInput.value = defaultFirstDue(
+        freqSelect.value,
+        data.startDate ? String(data.startDate) : '',
+        data.customDays as number | string | null | undefined,
+      );
       refreshPreview();
     };
     freqSelect.addEventListener('change', autoFirstDue);
     startInput.addEventListener('change', autoFirstDue);
-    const customDaysInput = form.querySelector('[name="customDays"]');
+    const customDaysInput = form.querySelector<HTMLInputElement>('[name="customDays"]')!;
     if (customDaysInput) customDaysInput.addEventListener('change', autoFirstDue);
     syncConditional();
     refreshPreview();
 
-    const addClientBtn = form.querySelector('[data-add-client]');
+    const addClientBtn = form.querySelector<HTMLElement>('[data-add-client]')!;
     if (addClientBtn) {
       addClientBtn.addEventListener('click', () => {
         const currentDraft = readForm(form);
@@ -461,7 +509,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
           () =>
             openClientForm({
               onSaved: (client) =>
-                openLoanForm({ initial: { ...currentDraft, clientId: client.id } }),
+                openLoanForm({ initial: { ...currentDraft, clientId: client.id } as unknown as Partial<LoanInput> }),
             }),
           200,
         );
@@ -495,7 +543,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
               lateFeeValue: num(data.lateFeeValue),
               graceDays: num(data.graceDays),
             };
-        updateLoan(existing.id, patch);
+        updateLoan(existing.id, patch as unknown as LoanPatch);
         toast('Préstamo actualizado.', 'success');
         modal.close();
       } else {
@@ -508,7 +556,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
           fees: num(data.fees),
           lateFeeValue: num(data.lateFeeValue),
           graceDays: num(data.graceDays),
-        });
+        } as unknown as LoanInput);
         toast(`${created.code} creado con ${created.installments} cuotas.`, 'success', 'Préstamo otorgado');
         modal.close();
         setTimeout(() => navigate(`loan/${created.id}`), 180);
@@ -519,7 +567,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null } 
   });
 }
 
-export async function deleteLoanFlow(loan) {
+export async function deleteLoanFlow(loan: LoanView): Promise<void> {
   const client = state.db.clients.find((c) => c.id === loan.clientId);
   const paymentCount = state.db.payments.filter((p) => p.loanId === loan.id).length;
   const ok = await confirmDialog({
@@ -538,7 +586,7 @@ export async function deleteLoanFlow(loan) {
   }
 }
 
-export function cancelLoanFlow(loan) {
+export function cancelLoanFlow(loan: LoanView): ReturnType<typeof openModal> {
   const modal = openModal({
     title: `Cancelar ${loan.code}`,
     subtitle: 'El préstamo dejará de generar mora y saldrá de la cartera activa.',
@@ -550,8 +598,8 @@ export function cancelLoanFlow(loan) {
     footer: `<button class="btn btn-ghost" type="button" data-close>Volver</button>
       <button class="btn btn-danger" type="button" data-confirm-cancel>Cancelar préstamo</button>`,
     onMount: ({ root, close }) => {
-      root.querySelector('[data-confirm-cancel]').addEventListener('click', () => {
-        const reason = root.querySelector('[name="reason"]').value;
+      root.querySelector<HTMLElement>('[data-confirm-cancel]')!.addEventListener('click', () => {
+        const reason = root.querySelector<HTMLTextAreaElement>('[name="reason"]')!.value;
         cancelLoan(loan.id, reason);
         toast('Préstamo cancelado.', 'success');
         close();
@@ -561,7 +609,7 @@ export function cancelLoanFlow(loan) {
   return modal;
 }
 
-export function reactivateLoanFlow(loan) {
+export function reactivateLoanFlow(loan: LoanView): void {
   reactivateLoan(loan.id);
   toast('Préstamo reactivado.', 'success');
 }
@@ -570,7 +618,12 @@ export function reactivateLoanFlow(loan) {
    PAGOS
    ============================================================ */
 
-export function openPaymentModal({ loanId = null, clientId = null } = {}) {
+export interface OpenPaymentModalOptions {
+  loanId?: string | null;
+  clientId?: string | null;
+}
+
+export function openPaymentModal({ loanId = null, clientId = null }: OpenPaymentModalOptions = {}): void {
   const loans = loanOptions(loanId, clientId);
   if (!loans.length) {
     toast('No hay préstamos activos para registrar pagos.', 'warning');
@@ -578,7 +631,7 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
   }
   const initialLoanId = loanId || loans[0].value;
   const initialView = computeLoan(
-    state.db.loans.find((l) => l.id === initialLoanId),
+    state.db.loans.find((l) => l.id === initialLoanId)!,
     paymentsFor(initialLoanId),
     T(),
   );
@@ -613,20 +666,20 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
       <button class="btn btn-primary" type="submit" form="payment-form">${icon('check', 16)} Guardar pago</button>`,
   });
 
-  const form = modal.body.querySelector('#payment-form');
-  const loanSelect = form.querySelector('[name="loanId"]');
-  const amountInput = form.querySelector('[name="amount"]');
-  const dateInput = form.querySelector('[name="date"]');
-  const summaryEl = modal.body.querySelector('#payment-loan-summary');
-  const previewEl = modal.body.querySelector('#payment-preview');
+  const form = modal.body.querySelector<HTMLFormElement>('#payment-form')!;
+  const loanSelect = form.querySelector<HTMLSelectElement>('[name="loanId"]')!;
+  const amountInput = form.querySelector<HTMLInputElement>('[name="amount"]')!;
+  const dateInput = form.querySelector<HTMLInputElement>('[name="date"]')!;
+  const summaryEl = modal.body.querySelector<HTMLElement>('#payment-loan-summary')!;
+  const previewEl = modal.body.querySelector<HTMLElement>('#payment-preview')!;
 
-  const currentLoan = () => computeLoan(
-    state.db.loans.find((l) => l.id === loanSelect.value),
+  const currentLoan = (): LoanView => computeLoan(
+    state.db.loans.find((l) => l.id === loanSelect.value)!,
     paymentsFor(loanSelect.value),
     T(),
   );
 
-  const refreshSummary = () => {
+  const refreshSummary = (): void => {
     const view = currentLoan();
     if (!view) return;
     const client = state.db.clients.find((c) => c.id === view.clientId);
@@ -648,7 +701,7 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
     </div>`;
   };
 
-  const refreshPreview = () => {
+  const refreshPreview = (): void => {
     const view = currentLoan();
     if (!view) return;
     const amount = num(amountInput.value);
@@ -659,7 +712,7 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
     const date = dateInput.value || T();
     const asOf = date > T() ? date : T();
     const simulation = simulatePayment(
-      state.db.loans.find((l) => l.id === loanSelect.value),
+      state.db.loans.find((l) => l.id === loanSelect.value)!,
       paymentsFor(loanSelect.value),
       { id: 'preview', loanId: loanSelect.value, date, amount, createdAt: new Date().toISOString() },
       asOf,
@@ -675,26 +728,26 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
     </div>`;
   };
 
-  const applyQuickAmount = (kind) => {
+  const applyQuickAmount = (kind: string): void => {
     const view = currentLoan();
     if (!view) return;
-    if (kind === 'full') amountInput.value = round2(view.totals.balance);
-    else if (kind === 'next') amountInput.value = round2(view.totals.nextDueAmount || view.totals.balance);
+    if (kind === 'full') amountInput.value = String(round2(view.totals.balance));
+    else if (kind === 'next') amountInput.value = String(round2(view.totals.nextDueAmount || view.totals.balance));
     else {
       const next = nextInstallment(view);
-      amountInput.value = round2((next ? next.interest : view.totals.remainingInterest) + (next?.lateDue || 0));
+      amountInput.value = String(round2((next ? next.interest : view.totals.remainingInterest) + (next?.lateDue || 0)));
     }
     refreshPreview();
   };
 
-  form.querySelectorAll('[data-quick-amount]').forEach((chip) => {
-    chip.addEventListener('click', () => applyQuickAmount(chip.dataset.quickAmount));
+  form.querySelectorAll<HTMLElement>('[data-quick-amount]').forEach((chip) => {
+    chip.addEventListener('click', () => applyQuickAmount(chip.dataset.quickAmount || 'next'));
   });
 
-  const syncLoanDefaults = () => {
+  const syncLoanDefaults = (): void => {
     const view = currentLoan();
     if (!view) return;
-    amountInput.value = round2(view.totals.nextDueAmount || view.totals.balance);
+    amountInput.value = String(round2(view.totals.nextDueAmount || view.totals.balance));
     refreshSummary();
     refreshPreview();
   };
@@ -707,7 +760,7 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
   refreshPreview();
 
   let withReceipt = false;
-  modal.root.querySelector('[data-save-receipt]').addEventListener('click', () => {
+  modal.root.querySelector<HTMLElement>('[data-save-receipt]')!.addEventListener('click', () => {
     withReceipt = true;
     form.requestSubmit();
   });
@@ -721,7 +774,7 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
         amount: num(data.amount),
         loanId: loanSelect.value,
         registerTransaction: data.registerTransaction !== false,
-      });
+      } as unknown as PaymentInput);
       toast(`Pago de ${money(payment.amount)} registrado · ${payment.receipt}`, 'success', 'Cobro guardado');
       modal.close();
       if (withReceipt) {
@@ -733,7 +786,7 @@ export function openPaymentModal({ loanId = null, clientId = null } = {}) {
   });
 }
 
-export function openPaymentEdit(payment) {
+export function openPaymentEdit(payment: Payment): void {
   const loan = state.db.loans.find((l) => l.id === payment.loanId);
   const client = state.db.clients.find((c) => c.id === payment.clientId);
   const modal = openModal({
@@ -751,10 +804,11 @@ export function openPaymentEdit(payment) {
     footer: `<button class="btn btn-ghost" type="button" data-close>Cancelar</button>
       <button class="btn btn-primary" type="submit" form="payment-edit">${icon('check', 16)} Guardar cambios</button>`,
   });
-  modal.body.querySelector('#payment-edit').addEventListener('submit', (event) => {
+  const form = modal.body.querySelector<HTMLFormElement>('#payment-edit')!;
+  form.addEventListener('submit', (event) => {
     event.preventDefault();
     try {
-      updatePayment(payment.id, readForm(event.target));
+      updatePayment(payment.id, readForm(form) as unknown as PaymentPatch);
       toast('Pago actualizado.', 'success');
       modal.close();
     } catch (err) {
@@ -763,7 +817,7 @@ export function openPaymentEdit(payment) {
   });
 }
 
-export async function deletePaymentFlow(payment) {
+export async function deletePaymentFlow(payment: Payment): Promise<void> {
   const ok = await confirmDialog({
     title: 'Eliminar pago',
     message: `¿Eliminar el pago ${payment.receipt} por ${money(payment.amount)}?`,
@@ -783,7 +837,17 @@ export async function deletePaymentFlow(payment) {
    RECIBOS
    ============================================================ */
 
-function paymentAllocation(payment) {
+interface PaymentAllocationSummary {
+  loan: LoanView;
+  late: number;
+  charges: number;
+  interest: number;
+  capital: number;
+  balance: number;
+  mora: number;
+}
+
+function paymentAllocation(payment: Payment): PaymentAllocationSummary | null {
   const loan = state.db.loans.find((l) => l.id === payment.loanId);
   if (!loan) return null;
   const all = paymentsFor(payment.loanId);
@@ -804,7 +868,7 @@ function paymentAllocation(payment) {
   };
 }
 
-function receiptMarkup(payment, { preview = false } = {}) {
+function receiptMarkup(payment: Payment, { preview = false }: { preview?: boolean } = {}): string {
   const settings = state.db.settings;
   const client = state.db.clients.find((c) => c.id === payment.clientId);
   const allocation = paymentAllocation(payment);
@@ -857,7 +921,7 @@ function receiptMarkup(payment, { preview = false } = {}) {
   </div>`;
 }
 
-export function openReceipt(paymentId) {
+export function openReceipt(paymentId: string): void {
   const payment = state.db.payments.find((p) => p.id === paymentId);
   if (!payment) {
     toast('No se encontró el pago.', 'error');
@@ -871,13 +935,13 @@ export function openReceipt(paymentId) {
     footer: `<button class="btn btn-ghost" type="button" data-close>Cerrar</button>
       <button class="btn btn-primary" type="button" data-print-receipt>${icon('print', 16)} Imprimir recibo</button>`,
   });
-  modal.root.querySelector('[data-print-receipt]').addEventListener('click', () => {
+  modal.root.querySelector<HTMLElement>('[data-print-receipt]')!.addEventListener('click', () => {
     printHTML(receiptMarkup(payment), `Recibo ${payment.receipt}`);
   });
 }
 
-export function printHTML(html, title = 'Documento') {
-  let sheet = document.getElementById('print-sheet');
+export function printHTML(html: string, title = 'Documento'): void {
+  let sheet = document.getElementById('print-sheet')!;
   if (!sheet) {
     sheet = document.createElement('div');
     sheet.id = 'print-sheet';
@@ -898,9 +962,9 @@ export function printHTML(html, title = 'Documento') {
    CONTRATO
    ============================================================ */
 
-export function openContract(loanId) {
+export function openContract(loanId: string): void {
   const loan = computeLoan(
-    state.db.loans.find((l) => l.id === loanId),
+    state.db.loans.find((l) => l.id === loanId)!,
     paymentsFor(loanId),
     T(),
   );
@@ -966,7 +1030,7 @@ export function openContract(loanId) {
     footer: `<button class="btn btn-ghost" type="button" data-close>Cerrar</button>
       <button class="btn btn-primary" type="button" data-print-contract>${icon('print', 16)} Imprimir contrato</button>`,
   });
-  modal.root.querySelector('[data-print-contract]').addEventListener('click', () => {
+  modal.root.querySelector<HTMLElement>('[data-print-contract]')!.addEventListener('click', () => {
     printHTML(html, `Contrato ${loan.code}`);
   });
 }
@@ -975,7 +1039,7 @@ export function openContract(loanId) {
    FINANZAS
    ============================================================ */
 
-export function openTransactionModal({ type = 'expense' } = {}) {
+export function openTransactionModal({ type = 'expense' }: { type?: string } = {}): void {
   const categories = state.db.categories;
   const modal = openModal({
     title: 'Nuevo movimiento',
@@ -1007,14 +1071,14 @@ export function openTransactionModal({ type = 'expense' } = {}) {
       <button class="btn btn-primary" type="submit" form="tx-form">${icon('check', 16)} Guardar movimiento</button>`,
   });
 
-  const form = modal.body.querySelector('#tx-form');
-  const typeInput = form.querySelector('[name="type"]');
-  const categoryWrap = form.querySelector('[data-category-wrap]');
-  const accountWrap = form.querySelector('[data-account-wrap]');
-  const toAccountWrap = form.querySelector('[data-to-account-wrap]');
-  const categoryInput = form.querySelector('[name="category"]');
-  const descriptionInput = form.querySelector('[name="description"]');
-  const amountInput = form.querySelector('[name="amount"]');
+  const form = modal.body.querySelector<HTMLFormElement>('#tx-form')!;
+  const typeInput = form.querySelector<HTMLInputElement>('[name="type"]')!;
+  const categoryWrap = form.querySelector<HTMLElement>('[data-category-wrap]')!;
+  const accountWrap = form.querySelector<HTMLElement>('[data-account-wrap]')!;
+  const toAccountWrap = form.querySelector<HTMLElement>('[data-to-account-wrap]')!;
+  const categoryInput = form.querySelector<HTMLInputElement>('[name="category"]')!;
+  const descriptionInput = form.querySelector<HTMLTextAreaElement>('[name="description"]')!;
+  const amountInput = form.querySelector<HTMLInputElement>('[name="amount"]')!;
 
   /* datalist para categorías existentes */
   const datalist = document.createElement('datalist');
@@ -1022,15 +1086,15 @@ export function openTransactionModal({ type = 'expense' } = {}) {
   form.append(datalist);
   categoryInput.setAttribute('list', 'tx-categories');
 
-  const fillCategories = () => {
+  const fillCategories = (): void => {
     const kind = typeInput.value === 'income' ? 'income' : 'expense';
     datalist.innerHTML = categories[kind].map((cat) => `<option value="${esc(cat)}"></option>`).join('');
     categoryInput.value = categories[kind][0] || '';
   };
 
-  const syncType = (next) => {
+  const syncType = (next: string): void => {
     typeInput.value = next;
-    form.querySelectorAll('[data-tx-type] [data-value]').forEach((btn) => {
+    form.querySelectorAll<HTMLElement>('[data-tx-type] [data-value]').forEach((btn) => {
       btn.classList.toggle('is-active', btn.dataset.value === next);
     });
     const isTransfer = next === 'transfer';
@@ -1046,8 +1110,8 @@ export function openTransactionModal({ type = 'expense' } = {}) {
     }
   };
 
-  form.querySelectorAll('[data-tx-type] [data-value]').forEach((btn) => {
-    btn.addEventListener('click', () => syncType(btn.dataset.value));
+  form.querySelectorAll<HTMLElement>('[data-tx-type] [data-value]').forEach((btn) => {
+    btn.addEventListener('click', () => syncType(btn.dataset.value || 'expense'));
   });
   fillCategories();
   syncType(type);
@@ -1057,10 +1121,10 @@ export function openTransactionModal({ type = 'expense' } = {}) {
     try {
       const data = readForm(form);
       if (data.type === 'transfer') {
-        addTransfer({ ...data, amount: num(data.amount) });
+        addTransfer({ ...data, amount: num(data.amount) } as unknown as TransferInput);
         toast('Transferencia registrada.', 'success');
       } else {
-        addTransaction({ ...data, amount: num(data.amount) });
+        addTransaction({ ...data, amount: num(data.amount) } as unknown as TransactionInput);
         toast(data.type === 'income' ? 'Ingreso registrado.' : 'Egreso registrado.', 'success');
       }
       modal.close();
@@ -1070,7 +1134,7 @@ export function openTransactionModal({ type = 'expense' } = {}) {
   });
 }
 
-export function openTransactionEdit(tx) {
+export function openTransactionEdit(tx: Transaction): void {
   const modal = openModal({
     title: 'Editar movimiento',
     size: 'md',
@@ -1084,11 +1148,12 @@ export function openTransactionEdit(tx) {
     footer: `<button class="btn btn-ghost" type="button" data-close>Cancelar</button>
       <button class="btn btn-primary" type="submit" form="tx-edit">${icon('check', 16)} Guardar</button>`,
   });
-  modal.body.querySelector('#tx-edit').addEventListener('submit', (event) => {
+  const form = modal.body.querySelector<HTMLFormElement>('#tx-edit')!;
+  form.addEventListener('submit', (event) => {
     event.preventDefault();
     try {
-      const data = readForm(event.target);
-      updateTransaction(tx.id, { ...data, amount: num(data.amount) });
+      const data = readForm(form);
+      updateTransaction(tx.id, { ...data, amount: num(data.amount) } as unknown as TransactionPatch);
       toast('Movimiento actualizado.', 'success');
       modal.close();
     } catch (err) {
@@ -1097,7 +1162,7 @@ export function openTransactionEdit(tx) {
   });
 }
 
-export async function deleteTransactionFlow(tx) {
+export async function deleteTransactionFlow(tx: Transaction): Promise<void> {
   const ok = await confirmDialog({
     title: 'Eliminar movimiento',
     message: `¿Eliminar “${tx.description || tx.category}” por ${money(tx.amount)}?`,
@@ -1112,7 +1177,7 @@ export async function deleteTransactionFlow(tx) {
   }
 }
 
-export function openAccountForm({ accountId = null } = {}) {
+export function openAccountForm({ accountId = null }: { accountId?: string | null } = {}): void {
   const account = accountId ? state.db.accounts.find((a) => a.id === accountId) : null;
   const modal = openModal({
     title: account ? 'Editar cuenta' : 'Nueva cuenta',
@@ -1138,12 +1203,13 @@ export function openAccountForm({ accountId = null } = {}) {
     footer: `<button class="btn btn-ghost" type="button" data-close>Cancelar</button>
       <button class="btn btn-primary" type="submit" form="account-form">${icon('check', 16)} ${account ? 'Guardar' : 'Crear cuenta'}</button>`,
   });
-  modal.body.querySelector('#account-form').addEventListener('submit', (event) => {
+  const form = modal.body.querySelector<HTMLFormElement>('#account-form')!;
+  form.addEventListener('submit', (event) => {
     event.preventDefault();
     try {
-      const data = readForm(event.target);
-      if (account) updateAccount(account.id, data);
-      else addAccount(data);
+      const data = readForm(form);
+      if (account) updateAccount(account.id, data as unknown as Partial<AccountInput>);
+      else addAccount(data as unknown as AccountInput);
       toast(account ? 'Cuenta actualizada.' : 'Cuenta creada.', 'success');
       modal.close();
     } catch (err) {
@@ -1152,7 +1218,7 @@ export function openAccountForm({ accountId = null } = {}) {
   });
 }
 
-export async function deleteAccountFlow(account) {
+export async function deleteAccountFlow(account: Account): Promise<void> {
   const ok = await confirmDialog({
     title: 'Eliminar cuenta',
     message: `¿Eliminar la cuenta “${account.name}”?`,
@@ -1172,11 +1238,11 @@ export async function deleteAccountFlow(account) {
    AJUSTES, RESPALDO Y DATOS
    ============================================================ */
 
-export function persistSettings() {
+export function persistSettings(): void {
   updateSettings({});
 }
 
-export async function backupData() {
+export async function backupData(): Promise<void> {
   try {
     const result = await window.api.backup();
     if (result.ok) toast('Respaldo guardado correctamente.', 'success', 'Copia de seguridad');
@@ -1186,7 +1252,7 @@ export async function backupData() {
   }
 }
 
-export async function restoreData() {
+export async function restoreData(): Promise<void> {
   const ok = await confirmDialog({
     title: 'Restaurar respaldo',
     message: 'Se reemplazarán todos los datos actuales por el contenido del archivo.',
@@ -1206,7 +1272,7 @@ export async function restoreData() {
   }
 }
 
-export async function loadDemoFlow({ confirm = true } = {}) {
+export async function loadDemoFlow({ confirm = true }: { confirm?: boolean } = {}): Promise<void> {
   const hasData = state.db.clients.length || state.db.loans.length;
   if (confirm && hasData) {
     const ok = await confirmDialog({
@@ -1223,7 +1289,7 @@ export async function loadDemoFlow({ confirm = true } = {}) {
   navigate('dashboard');
 }
 
-export async function clearDataFlow() {
+export async function clearDataFlow(): Promise<void> {
   const ok = await confirmDialog({
     title: 'Borrar todos los datos',
     message: 'Se eliminarán clientes, préstamos, pagos y movimientos de caja.',
@@ -1236,7 +1302,14 @@ export async function clearDataFlow() {
   navigate('dashboard');
 }
 
-export async function exportCSV({ filename, headers, rows, title }) {
+export interface ExportCsvOptions {
+  filename?: string;
+  headers: readonly unknown[];
+  rows: readonly (readonly unknown[])[];
+  title?: string;
+}
+
+export async function exportCSV({ filename, headers, rows, title }: ExportCsvOptions): Promise<void> {
   try {
     const content = toCSV(headers, rows);
     const result = await window.api.saveText({
@@ -1255,7 +1328,7 @@ export async function exportCSV({ filename, headers, rows, title }) {
    BIENVENIDA
    ============================================================ */
 
-export function showWelcome() {
+export function showWelcome(): void {
   const modal = openModal({
     title: 'Bienvenido a Préstamos Pro',
     subtitle: 'Tu centro de control para préstamos, clientes y finanzas.',
@@ -1289,13 +1362,13 @@ export function showWelcome() {
     footer: `<button class="btn btn-outline" type="button" data-empty-start>${icon('file-text', 16)} Empezar desde cero</button>
       <button class="btn btn-primary" type="button" data-demo-start>${icon('sparkles', 16)} Cargar datos de ejemplo</button>`,
   });
-  modal.root.querySelector('[data-empty-start]').addEventListener('click', () => {
+  modal.root.querySelector<HTMLElement>('[data-empty-start]')!.addEventListener('click', () => {
     updateSettings({ firstRun: false });
     modal.close();
     navigate('clients');
     setTimeout(() => openClientForm(), 250);
   });
-  modal.root.querySelector('[data-demo-start]').addEventListener('click', async () => {
+  modal.root.querySelector<HTMLElement>('[data-demo-start]')!.addEventListener('click', async () => {
     modal.close();
     updateSettings({ firstRun: false });
     await loadDemoFlow({ confirm: false });

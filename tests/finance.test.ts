@@ -17,11 +17,12 @@ import {
   periodRate,
   uid,
 } from '../src/finance.js';
+import type { LoanTerms, TransactionLike } from '../src/types.js';
 
 let passed = 0;
 let failed = 0;
 
-function test(name, fn) {
+function test(name: string, fn: () => void): void {
   try {
     fn();
     passed += 1;
@@ -33,11 +34,11 @@ function test(name, fn) {
   }
 }
 
-function close(actual, expected, epsilon = 0.01) {
+function close(actual: number, expected: number, epsilon = 0.01): void {
   assert.ok(Math.abs(actual - expected) <= epsilon, `esperado ${expected}, recibido ${actual}`);
 }
 
-function baseLoan(overrides = {}) {
+function baseLoan(overrides: Partial<LoanTerms> = {}): LoanTerms {
   return {
     id: 'loan_test',
     principal: 300,
@@ -218,7 +219,7 @@ test('portfolioSummary suma la cartera sin cancelados', () => {
 test('accountBalance considera ingresos, egresos y transferencias', () => {
   const account = { id: 'acc', openingBalance: 100 };
   const other = { id: 'other', openingBalance: 0 };
-  const transactions = [
+  const transactions: TransactionLike[] = [
     { type: 'income', accountId: 'acc', amount: 50 },
     { type: 'expense', accountId: 'acc', amount: 30 },
     { type: 'transfer', accountId: 'acc', toAccountId: 'other', amount: 20 },
@@ -228,7 +229,7 @@ test('accountBalance considera ingresos, egresos y transferencias', () => {
 });
 
 test('transactionsSummary filtra por fecha y calcula el neto', () => {
-  const list = [
+  const list: TransactionLike[] = [
     { date: '2024-01-10', type: 'income', amount: 100 },
     { date: '2024-01-15', type: 'expense', amount: 40 },
     { date: '2024-02-01', type: 'income', amount: 500 },

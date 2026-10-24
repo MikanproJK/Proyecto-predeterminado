@@ -14,72 +14,139 @@ import {
   portfolioSummary,
 } from '../finance.js';
 import { demoDatabase } from '../seed.js';
+import type {
+  Account,
+  AccountInput,
+  AccountWithBalance,
+  Categories,
+  Client,
+  ClientInput,
+  ClientStats,
+  Database,
+  Loan,
+  LoanId,
+  LoanInput,
+  LoanPatch,
+  LoanView,
+  Payment,
+  PaymentInput,
+  PaymentPatch,
+  ScheduleRow,
+  Settings,
+  SettingsPatch,
+  StoreEventType,
+  StoreListener,
+  StoreState,
+  ThemeId,
+  Transaction,
+  TransactionInput,
+  TransactionPatch,
+  TransferInput,
+} from '../types.js';
 
 export { portfolioSummary };
 
-export function defaultAccounts() {
-  return [
-    { id: 'acc_cash', name: 'Caja principal', type: 'cash', openingBalance: 0, color: '#4f6ef7' },
-    { id: 'acc_bank', name: 'Cuenta bancaria', type: 'bank', openingBalance: 0, color: '#17a673' },
-  ];
-}
+/* ---------- repositorio y cola de escritura ---------- */
 
-export function createDefaultDB() {
-  return {
-    version: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    settings: {
-      company: 'Mi Financiera',
-      owner: '',
-      currency: 'USD',
-      locale: 'es-419',
-      theme: 'aurora',
-      density: 'comfortable',
-      fontScale: 1,
-      autoTransactions: true,
-      defaultAccountId: 'acc_cash',
-      lateFeeType: 'percent_daily',
-      lateFeeValue: 1,
-      graceDays: 0,
-      firstRun: true,
-      loanCounter: 1,
-      receiptCounter: 1,
-    },
-    clients: [],
-    loans: [],
-    payments: [],
-    accounts: defaultAccounts(),
-    transactions: [],
-    categories: {
-      income: ['Cobro de cuota', 'Interés', 'Comisión', 'Otro ingreso'],
-      expense: ['Préstamo otorgado', 'Operativo', 'Personal', 'Servicios', 'Retiro', 'Otro egreso'],
-    },
-  };
-}
-
-function hydrate(raw) {
-  const base = createDefaultDB();
-  if (!raw || typeof raw !== 'object') return base;
-  const db = {
-    ...base,
-    ...raw,
-    settings: { ...base.settings, ...(raw.settings || {}) },
-    categories: { ...base.categories, ...(raw.categories || {}) },
-  };
-  for (const key of ['clients', 'loans', 'payments', 'accounts', 'transactions']) {
-    if (!Array.isArray(db[key])) db[key] = [];
+class StoreRepository {
+  defaultAccounts(): Account[] {
+    return [
+      { id: 'acc_cash', name: 'Caja principal', type: 'cash', openingBalance: 0, color: '#4f6ef7' },
+      { id: 'acc_bank', name: 'Cuenta bancaria', type: 'bank', openingBalance: 0, color: '#17a673' },
+    ];
   }
-  if (!db.accounts.length) db.accounts = defaultAccounts();
-  if (!db.settings.defaultAccountId || !db.accounts.some((a) => a.id === db.settings.defaultAccountId)) {
-    db.settings.defaultAccountId = db.accounts[0].id;
+
+  createDefaultDB(): Database {
+    return {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      settings: {
+        company: 'Mi Financiera',
+        owner: '',
+        currency: 'USD',
+        locale: 'es-419',
+        theme: 'aurora',
+        density: 'comfortable',
+        fontScale: 1,
+        autoTransactions: true,
+        defaultAccountId: 'acc_cash',
+        lateFeeType: 'percent_daily',
+        lateFeeValue: 1,
+        graceDays: 0,
+        firstRun: true,
+        loanCounter: 1,
+        receiptCounter: 1,
+      },
+      clients: [],
+      loans: [],
+      payments: [],
+      accounts: this.defaultAccounts(),
+      transactions: [],
+      categories: {
+        income: ['Cobro de cuota', 'Interés', 'Comisión', 'Otro ingreso'],
+        expense: ['Préstamo otorgado', 'Operativo', 'Personal', 'Servicios', 'Retiro', 'Otro egreso'],
+      },
+    };
   }
-  db.settings.loanCounter = Math.max(num(db.settings.loanCounter) || 1, db.loans.length + 1);
-  db.settings.receiptCounter = Math.max(num(db.settings.receiptCounter) || 1, db.payments.length + 1);
-  return db;
+
+  hydrate(raw: unknown): Database {
+    const base = this.createDefaultDB();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return base;
+    const source = raw as Partial<Database> & {
+      settings?: Partial<Settings>;
+      categories?: Partial<Categories>;
+    };
+    const db = {
+      ...base,
+      ...source,
+      settings: { ...base.settings, ...(source.settings || {}) },
+      categories: { ...base.categories, ...(source.categories || {}) },
+    } as Database;
+    for (const key of ['clients', 'loans', 'payments', 'accounts', 'transactions'] as const) {
+      if (!Array.isArray(db[key])) {
+        (db as unknown as Record<string, unknown>)[key] = [];
+      }
+    }
+    if (!db.accounts.length) db.accounts = this.defaultAccounts();
+    if (!db.settings.defaultAccountId || !db.accounts.some((a) => a.id === db.settings.defaultAccountId)) {
+      db.settings.defaultAccountId = db.accounts[0].id;
+    }
+    db.settings.loanCounter = Math.max(num(db.settings.loanCounter) || 1, db.loans.length + 1);
+    db.settings.receiptCounter = Math.max(num(db.settings.receiptCounter) || 1, db.payments.length + 1);
+    return db;
+  }
 }
 
-export const state = {
+class SaveQueue {
+  private chain: Promise<void> = Promise.resolve();
+
+  enqueue(task: () => Promise<void>): Promise<void> {
+    this.chain = this.chain.then(task).catch(() => {});
+    return this.chain;
+  }
+
+  flush(): Promise<void> {
+    return this.chain;
+  }
+}
+
+const repository = new StoreRepository();
+const saveQueue = new SaveQueue();
+
+export function defaultAccounts(): Account[] {
+  return repository.defaultAccounts();
+}
+
+export function createDefaultDB(): Database {
+  return repository.createDefaultDB();
+}
+
+function hydrate(raw: unknown): Database {
+  return repository.hydrate(raw);
+}
+
+export const state: StoreState = {
   db: createDefaultDB(),
   revision: 0,
   ready: false,
@@ -88,14 +155,14 @@ export const state = {
   saveError: null,
 };
 
-const listeners = new Set();
+const listeners = new Set<StoreListener>();
 
-export function subscribe(fn) {
+export function subscribe(fn: StoreListener): () => boolean {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-function emit(type = 'change') {
+function emit(type: StoreEventType = 'change'): void {
   for (const fn of listeners) {
     try {
       fn(type, state);
@@ -107,35 +174,30 @@ function emit(type = 'change') {
 
 /* ---------- persistencia ---------- */
 
-let writeChain = Promise.resolve();
-
-function persist() {
-  const snapshot = JSON.parse(JSON.stringify(state.db));
+function persist(): Promise<void> {
+  const snapshot = JSON.parse(JSON.stringify(state.db)) as Database;
   state.db.updatedAt = snapshot.updatedAt || new Date().toISOString();
-  writeChain = writeChain
-    .then(async () => {
-      state.saving = true;
-      try {
-        await window.api.save(snapshot);
-        state.lastSavedAt = new Date();
-        state.saveError = null;
-      } catch (err) {
-        console.error('[store] error al guardar', err);
-        state.saveError = err?.message || String(err);
-        emit('save-error');
-      } finally {
-        state.saving = false;
-      }
-    })
-    .catch(() => {});
-  return writeChain;
+  return saveQueue.enqueue(async () => {
+    state.saving = true;
+    try {
+      await window.api.save(snapshot);
+      state.lastSavedAt = new Date();
+      state.saveError = null;
+    } catch (err) {
+      console.error('[store] error al guardar', err);
+      state.saveError = err instanceof Error ? err.message : String(err);
+      emit('save-error');
+    } finally {
+      state.saving = false;
+    }
+  });
 }
 
-export function flushSave() {
-  return writeChain;
+export function flushSave(): Promise<void> {
+  return saveQueue.flush();
 }
 
-export async function init() {
+export async function init(): Promise<Database> {
   const raw = await window.api.load();
   state.db = hydrate(raw);
   configureFormat({
@@ -150,39 +212,44 @@ export async function init() {
 
 /* ---------- helpers de consulta ---------- */
 
-let loanViewCache = new Map();
+let loanViewCache = new Map<string, LoanView[]>();
 
-export function loanViews(asOf = todayISO()) {
+export function loanViews(asOf: string = todayISO()): LoanView[] {
   const key = `${state.revision}:${asOf}`;
-  if (loanViewCache.has(key)) return loanViewCache.get(key);
+  const cached = loanViewCache.get(key);
+  if (cached) return cached;
   const views = buildLoanViews(state.db.loans, state.db.payments, asOf);
   loanViewCache = new Map([[key, views]]);
   return views;
 }
 
-export function loanView(id, asOf = todayISO()) {
+export function loanView(id: string, asOf: string = todayISO()): LoanView | null {
   return loanViews(asOf).find((loan) => loan.id === id) || null;
 }
 
-export function client(id) {
+export function client(id: string | null | undefined): Client | null {
   return state.db.clients.find((c) => c.id === id) || null;
 }
 
-export function loan(id) {
+export function loan(id: string | null | undefined): Loan | null {
   return state.db.loans.find((l) => l.id === id) || null;
 }
 
-export function paymentsFor(loanId) {
+export function paymentsFor(loanId: string): Payment[] {
   return state.db.payments
     .filter((p) => p.loanId === loanId)
-    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    .sort(
+      (a, b) =>
+        String(b.date).localeCompare(String(a.date)) ||
+        String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
+    );
 }
 
-export function clientLoans(clientId) {
+export function clientLoans(clientId: string): LoanView[] {
   return loanViews().filter((l) => l.clientId === clientId);
 }
 
-export function clientStats(clientId) {
+export function clientStats(clientId: string): ClientStats {
   const loans = clientLoans(clientId);
   return {
     loans: loans.length,
@@ -191,31 +258,32 @@ export function clientStats(clientId) {
     paid: round2(sum(loans, (l) => l.totals.paid)),
     balance: round2(sum(loans.filter((l) => l.state !== 'cancelled'), (l) => l.totals.balance)),
     lateDue: round2(sum(loans, (l) => l.totals.lateDue)),
-    lastPayment: state.db.payments
-      .filter((p) => p.clientId === clientId)
-      .map((p) => p.date)
-      .sort()
-      .pop() || null,
+    lastPayment:
+      state.db.payments
+        .filter((p) => p.clientId === clientId)
+        .map((p) => p.date)
+        .sort()
+        .pop() || null,
   };
 }
 
-export function accountBalances() {
+export function accountBalances(): AccountWithBalance[] {
   return state.db.accounts.map((account) => ({
     ...account,
     balance: accountBalance(account, state.db.transactions),
   }));
 }
 
-export function totalBalance() {
+export function totalBalance(): number {
   return round2(sum(accountBalances(), (a) => a.balance));
 }
 
 /* ---------- clientes ---------- */
 
-export function addClient(input) {
+export function addClient(input: ClientInput): Client {
   const name = String(input.name || '').trim();
   if (!name) throw new Error('El nombre del cliente es obligatorio.');
-  const client = {
+  const client: Client = {
     id: uid('cli'),
     name,
     phone: String(input.phone || '').trim(),
@@ -234,18 +302,18 @@ export function addClient(input) {
   return client;
 }
 
-export function updateClient(id, patch) {
+export function updateClient(id: string, patch: Partial<ClientInput>): Client {
   const target = state.db.clients.find((c) => c.id === id);
   if (!target) throw new Error('Cliente no encontrado.');
   if (patch.name !== undefined && !String(patch.name).trim()) {
     throw new Error('El nombre del cliente es obligatorio.');
   }
-  Object.assign(target, patch, { updatedAt: new Date().toISOString() });
+  Object.assign(target, patch as Partial<Client>, { updatedAt: new Date().toISOString() });
   bump();
   return target;
 }
 
-export function deleteClient(id) {
+export function deleteClient(id: string): boolean {
   const hasLoans = state.db.loans.some((l) => l.clientId === id);
   if (hasLoans) {
     throw new Error('El cliente tiene préstamos asociados. Elimina o reasigna esos préstamos primero.');
@@ -257,10 +325,10 @@ export function deleteClient(id) {
 
 /* ---------- préstamos ---------- */
 
-function nextLoanCode() {
+function nextLoanCode(): string {
   const counter = Math.max(1, num(state.db.settings.loanCounter) || 1);
   let code = `P-${String(counter).padStart(4, '0')}`;
-  let used = new Set(state.db.loans.map((l) => l.code));
+  const used = new Set(state.db.loans.map((l) => l.code));
   let next = counter;
   while (used.has(code)) {
     next += 1;
@@ -270,13 +338,13 @@ function nextLoanCode() {
   return code;
 }
 
-function nextReceipt() {
+function nextReceipt(): string {
   const counter = Math.max(1, num(state.db.settings.receiptCounter) || 1);
   state.db.settings.receiptCounter = counter + 1;
   return `REC-${String(counter).padStart(5, '0')}`;
 }
 
-export function addLoan(input) {
+export function addLoan(input: LoanInput): Loan {
   const clientRecord = state.db.clients.find((c) => c.id === input.clientId);
   if (!clientRecord) throw new Error('Selecciona un cliente válido.');
   const principal = round2(num(input.principal));
@@ -284,20 +352,20 @@ export function addLoan(input) {
   const installments = Math.max(1, Math.round(num(input.installments) || 1));
   const startDate = input.startDate || todayISO();
   const firstDueDate = input.firstDueDate || startDate;
-  const loan = {
+  const loan: Loan = {
     id: uid('loan'),
     code: nextLoanCode(),
     clientId: clientRecord.id,
     principal,
     interestRate: num(input.interestRate),
-    rateType: input.rateType || 'monthly',
-    amortization: input.amortization || 'fixed',
-    frequency: input.frequency || 'monthly',
+    rateType: (input.rateType || 'monthly') as Loan['rateType'],
+    amortization: (input.amortization || 'fixed') as Loan['amortization'],
+    frequency: (input.frequency || 'monthly') as Loan['frequency'],
     customDays: Math.max(1, Math.round(num(input.customDays) || 15)),
     installments,
     startDate,
     firstDueDate,
-    lateFeeType: input.lateFeeType || 'none',
+    lateFeeType: (input.lateFeeType || 'none') as Loan['lateFeeType'],
     lateFeeValue: num(input.lateFeeValue),
     graceDays: Math.max(0, Math.round(num(input.graceDays))),
     fees: round2(num(input.fees)),
@@ -331,12 +399,12 @@ export function addLoan(input) {
   return loan;
 }
 
-export function updateLoan(id, patch) {
+export function updateLoan(id: string, patch: LoanPatch): Loan {
   const target = state.db.loans.find((l) => l.id === id);
   if (!target) throw new Error('Préstamo no encontrado.');
   const hasPayments = state.db.payments.some((p) => p.loanId === id);
   const safeKeys = ['notes', 'guarantee', 'lateFeeType', 'lateFeeValue', 'graceDays', 'status', 'clientId'];
-  const next = { ...patch };
+  const next = { ...patch } as Record<string, unknown>;
   if (hasPayments) {
     for (const key of Object.keys(next)) {
       if (!safeKeys.includes(key)) delete next[key];
@@ -353,7 +421,7 @@ export function updateLoan(id, patch) {
   return target;
 }
 
-export function cancelLoan(id, reason = '') {
+export function cancelLoan(id: string, reason = ''): Loan {
   const target = state.db.loans.find((l) => l.id === id);
   if (!target) throw new Error('Préstamo no encontrado.');
   target.status = 'cancelled';
@@ -364,7 +432,7 @@ export function cancelLoan(id, reason = '') {
   return target;
 }
 
-export function reactivateLoan(id) {
+export function reactivateLoan(id: string): Loan {
   const target = state.db.loans.find((l) => l.id === id);
   if (!target) throw new Error('Préstamo no encontrado.');
   target.status = 'active';
@@ -375,7 +443,7 @@ export function reactivateLoan(id) {
   return target;
 }
 
-export function deleteLoan(id) {
+export function deleteLoan(id: string): boolean {
   const target = state.db.loans.find((l) => l.id === id);
   if (!target) throw new Error('Préstamo no encontrado.');
   const paymentIds = new Set(state.db.payments.filter((p) => p.loanId === id).map((p) => p.id));
@@ -388,25 +456,25 @@ export function deleteLoan(id) {
   return true;
 }
 
-export function previewLoan(loanInput) {
+export function previewLoan(loanInput: LoanInput): LoanView {
   const temp = {
     id: 'preview',
     ...loanInput,
     principal: num(loanInput.principal),
     installments: Math.max(1, Math.round(num(loanInput.installments) || 1)),
-    lateFeeType: 'none',
+    lateFeeType: 'none' as const,
   };
-  return computeLoan(temp, [], todayISO());
+  return computeLoan(temp as unknown as Parameters<typeof computeLoan>[0], [], todayISO());
 }
 
 /* ---------- pagos ---------- */
 
-export function addPayment(input) {
+export function addPayment(input: PaymentInput): Payment {
   const target = state.db.loans.find((l) => l.id === input.loanId);
   if (!target) throw new Error('Selecciona un préstamo válido.');
   const amount = round2(num(input.amount));
   if (amount <= 0) throw new Error('El monto del pago debe ser mayor que cero.');
-  const payment = {
+  const payment: Payment = {
     id: uid('pay'),
     receipt: nextReceipt(),
     loanId: target.id,
@@ -443,10 +511,10 @@ export function addPayment(input) {
   return payment;
 }
 
-export function updatePayment(id, patch) {
+export function updatePayment(id: string, patch: PaymentPatch): Payment {
   const payment = state.db.payments.find((p) => p.id === id);
   if (!payment) throw new Error('Pago no encontrado.');
-  const next = {};
+  const next: PaymentPatch = {};
   if (patch.date) next.date = patch.date;
   if (patch.amount !== undefined) {
     const amount = round2(num(patch.amount));
@@ -468,7 +536,7 @@ export function updatePayment(id, patch) {
   return payment;
 }
 
-export function deletePayment(id) {
+export function deletePayment(id: string): boolean {
   const payment = state.db.payments.find((p) => p.id === id);
   if (!payment) throw new Error('Pago no encontrado.');
   state.db.payments = state.db.payments.filter((p) => p.id !== id);
@@ -479,11 +547,11 @@ export function deletePayment(id) {
 
 /* ---------- finanzas ---------- */
 
-export function addTransaction(input) {
+export function addTransaction(input: TransactionInput): Transaction {
   const amount = round2(num(input.amount));
   if (amount <= 0) throw new Error('El monto debe ser mayor que cero.');
-  const type = ['income', 'expense'].includes(input.type) ? input.type : 'expense';
-  const tx = {
+  const type: Transaction['type'] = input.type === 'income' ? 'income' : 'expense';
+  const tx: Transaction = {
     id: uid('tx'),
     date: input.date || todayISO(),
     type,
@@ -499,13 +567,13 @@ export function addTransaction(input) {
   return tx;
 }
 
-export function addTransfer(input) {
+export function addTransfer(input: TransferInput): Transaction {
   const amount = round2(num(input.amount));
   if (amount <= 0) throw new Error('El monto debe ser mayor que cero.');
   if (!input.accountId || !input.toAccountId || input.accountId === input.toAccountId) {
     throw new Error('Selecciona dos cuentas diferentes.');
   }
-  const tx = {
+  const tx: Transaction = {
     id: uid('tx'),
     date: input.date || todayISO(),
     type: 'transfer',
@@ -522,11 +590,11 @@ export function addTransfer(input) {
   return tx;
 }
 
-export function updateTransaction(id, patch) {
+export function updateTransaction(id: string, patch: TransactionPatch): Transaction {
   const tx = state.db.transactions.find((t) => t.id === id);
   if (!tx) throw new Error('Movimiento no encontrado.');
   if (tx.auto) throw new Error('Este movimiento se generó automáticamente desde un pago o préstamo. Edita el registro original.');
-  const next = { ...patch };
+  const next = { ...patch } as TransactionPatch;
   if (next.amount !== undefined) {
     const amount = round2(num(next.amount));
     if (amount <= 0) throw new Error('El monto debe ser mayor que cero.');
@@ -537,7 +605,7 @@ export function updateTransaction(id, patch) {
   return tx;
 }
 
-export function deleteTransaction(id) {
+export function deleteTransaction(id: string): boolean {
   const tx = state.db.transactions.find((t) => t.id === id);
   if (!tx) throw new Error('Movimiento no encontrado.');
   if (tx.auto) throw new Error('Este movimiento está vinculado a un pago o préstamo. Elimina el registro original.');
@@ -546,7 +614,7 @@ export function deleteTransaction(id) {
   return true;
 }
 
-export function addCategory(kind, name) {
+export function addCategory(kind: string, name: string): string {
   const clean = String(name || '').trim();
   if (!clean) throw new Error('Escribe un nombre para la categoría.');
   const key = kind === 'income' ? 'income' : 'expense';
@@ -555,7 +623,7 @@ export function addCategory(kind, name) {
   return clean;
 }
 
-export function removeCategory(kind, name) {
+export function removeCategory(kind: string, name: string): void {
   const key = kind === 'income' ? 'income' : 'expense';
   state.db.categories[key] = state.db.categories[key].filter((c) => c !== name);
   bump();
@@ -563,13 +631,13 @@ export function removeCategory(kind, name) {
 
 /* ---------- cuentas ---------- */
 
-export function addAccount(input) {
+export function addAccount(input: AccountInput): Account {
   const name = String(input.name || '').trim();
   if (!name) throw new Error('Escribe un nombre para la cuenta.');
-  const account = {
+  const account: Account = {
     id: uid('acc'),
     name,
-    type: input.type || 'cash',
+    type: (input.type || 'cash') as Account['type'],
     openingBalance: round2(num(input.openingBalance)),
     color: input.color || '#4f6ef7',
     createdAt: new Date().toISOString(),
@@ -579,16 +647,16 @@ export function addAccount(input) {
   return account;
 }
 
-export function updateAccount(id, patch) {
+export function updateAccount(id: string, patch: Partial<AccountInput>): Account {
   const account = state.db.accounts.find((a) => a.id === id);
   if (!account) throw new Error('Cuenta no encontrada.');
-  Object.assign(account, patch);
+  Object.assign(account, patch as Partial<Account>);
   if (patch.openingBalance !== undefined) account.openingBalance = round2(num(patch.openingBalance));
   bump();
   return account;
 }
 
-export function deleteAccount(id) {
+export function deleteAccount(id: string): boolean {
   if (state.db.accounts.length <= 1) throw new Error('Debe existir al menos una cuenta.');
   const inUse = state.db.transactions.some((t) => t.accountId === id || t.toAccountId === id);
   if (inUse) throw new Error('La cuenta tiene movimientos asociados. No se puede eliminar.');
@@ -600,7 +668,7 @@ export function deleteAccount(id) {
 
 /* ---------- ajustes y datos ---------- */
 
-export function updateSettings(patch) {
+export function updateSettings(patch: SettingsPatch): Settings {
   Object.assign(state.db.settings, patch);
   configureFormat({
     currency: state.db.settings.currency,
@@ -610,12 +678,12 @@ export function updateSettings(patch) {
   return state.db.settings;
 }
 
-export function setTheme(theme) {
+export function setTheme(theme: ThemeId): void {
   state.db.settings.theme = theme;
   bump();
 }
 
-export async function loadDemo() {
+export async function loadDemo(): Promise<void> {
   state.db = demoDatabase(state.db);
   state.db = hydrate(state.db);
   configureFormat({ currency: state.db.settings.currency, locale: state.db.settings.locale });
@@ -623,8 +691,8 @@ export async function loadDemo() {
   await persist();
 }
 
-export async function clearData({ keepSettings = true } = {}) {
-  const settings = keepSettings
+export async function clearData({ keepSettings = true }: { keepSettings?: boolean } = {}): Promise<void> {
+  const settings: Settings = keepSettings
     ? { ...state.db.settings, firstRun: false, loanCounter: 1, receiptCounter: 1 }
     : createDefaultDB().settings;
   const fresh = createDefaultDB();
@@ -640,21 +708,21 @@ export async function clearData({ keepSettings = true } = {}) {
   await persist();
 }
 
-export async function replaceDB(raw) {
+export async function replaceDB(raw: unknown): Promise<void> {
   state.db = hydrate(raw);
   configureFormat({ currency: state.db.settings.currency, locale: state.db.settings.locale });
   bump();
   await persist();
 }
 
-export function markFirstRunSeen() {
+export function markFirstRunSeen(): void {
   if (state.db.settings.firstRun) {
     state.db.settings.firstRun = false;
     bump();
   }
 }
 
-function bump() {
+function bump(): void {
   state.revision += 1;
   state.db.updatedAt = new Date().toISOString();
   loanViewCache = new Map();
@@ -663,13 +731,13 @@ function bump() {
 }
 
 /* pequeña utilidad usada por la vista de préstamos para previsualizar */
-export function schedulePreview(input) {
+export function schedulePreview(input: LoanInput): ScheduleRow[] {
   return buildSchedule({
     principal: num(input.principal),
     interestRate: num(input.interestRate),
-    rateType: input.rateType,
-    amortization: input.amortization,
-    frequency: input.frequency,
+    rateType: input.rateType as Loan['rateType'],
+    amortization: input.amortization as Loan['amortization'],
+    frequency: input.frequency as Loan['frequency'],
     customDays: input.customDays,
     installments: Math.max(1, Math.round(num(input.installments) || 1)),
     startDate: input.startDate,

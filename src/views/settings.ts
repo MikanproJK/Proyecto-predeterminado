@@ -14,8 +14,9 @@ import {
 } from '../lib/ui.js';
 import { THEMES, DENSITIES, CURRENCIES, LOCALES, themeMeta } from '../lib/themes.js';
 import * as actions from '../actions.js';
+import type { Density, Settings, SettingsPatch, ThemeId, ViewContext } from '../types.js';
 
-function appearanceCard(settings) {
+function appearanceCard(settings: Settings) {
   return `<section class="card">
     <div class="card-head">
       <div class="card-heading">
@@ -68,7 +69,7 @@ function appearanceCard(settings) {
   </section>`;
 }
 
-function businessCard(settings) {
+function businessCard(settings: Settings) {
   const accountOptions = state.db.accounts.map((account) => ({ value: account.id, label: account.name }));
   return `<section class="card">
     <div class="card-head">
@@ -93,7 +94,7 @@ function businessCard(settings) {
   </section>`;
 }
 
-function loanDefaultsCard(settings) {
+function loanDefaultsCard(settings: Settings) {
   return `<section class="card">
     <div class="card-head">
       <div class="card-heading">
@@ -182,7 +183,7 @@ function shortcutsCard() {
   </section>`;
 }
 
-function aboutCard(settings) {
+function aboutCard(settings: Settings) {
   return `<section class="card">
     <div class="card-head">
       <div class="card-heading">
@@ -237,7 +238,7 @@ function tipsCard() {
   </section>`;
 }
 
-export function render(root) {
+export function render(root: HTMLElement, _ctx: ViewContext): void {
   const settings = state.db.settings;
 
   root.innerHTML = `<div class="page">
@@ -257,23 +258,23 @@ export function render(root) {
   </div>`;
 
   /* Apariencia */
-  root.querySelectorAll('[data-theme-id]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-theme-id]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      updateSettings({ theme: btn.dataset.themeId });
+      updateSettings({ theme: (btn.dataset.themeId || 'aurora') as ThemeId });
     });
   });
-  root.querySelectorAll('[data-segmented="density"] [data-value]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-segmented="density"] [data-value]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      updateSettings({ density: btn.dataset.value });
+      updateSettings({ density: (btn.dataset.value || 'comfortable') as Density });
     });
   });
 
-  const scale = root.querySelector('#font-scale');
+  const scale = root.querySelector<HTMLInputElement>('#font-scale')!;
   if (scale) {
     scale.addEventListener('input', () => {
       const value = Number(scale.value) || 1;
       document.documentElement.style.setProperty('--font-scale', String(value));
-      const label = root.querySelector('#font-scale-value');
+      const label = root.querySelector<HTMLElement>('#font-scale-value');
       if (label) label.textContent = `${Math.round(value * 100)}%`;
     });
     scale.addEventListener('change', () => {
@@ -281,29 +282,29 @@ export function render(root) {
     });
   }
 
-  root.querySelector('[data-reset-appearance]')?.addEventListener('click', () => {
+  root.querySelector<HTMLElement>('[data-reset-appearance]')!?.addEventListener('click', () => {
     updateSettings({ theme: 'aurora', density: 'comfortable', fontScale: 1 });
     toast('Apariencia restablecida.', 'success');
   });
 
   /* Preferencias del negocio y valores por defecto */
   const settingsInputs = [
-    ...root.querySelectorAll('#settings-business [name], #settings-loans [name]'),
-    root.querySelector('[name="autoTransactions"]'),
-  ].filter(Boolean);
+    ...Array.from(root.querySelectorAll<HTMLInputElement>('#settings-business [name], #settings-loans [name]')),
+    root.querySelector<HTMLInputElement>('[name="autoTransactions"]'),
+  ].filter((input): input is HTMLInputElement => input !== null);
 
   settingsInputs.forEach((input) => {
     input.addEventListener('change', () => {
       const name = input.name;
       if (!name) return;
-      let value = input.type === 'checkbox' ? input.checked : input.value;
+      let value: string | number | boolean = input.type === 'checkbox' ? input.checked : input.value;
       if (['lateFeeValue', 'graceDays'].includes(name)) value = num(value);
       if (name === 'company' && !String(value).trim()) {
         toast('El nombre del negocio no puede quedar vacío.', 'warning');
         input.value = settings.company || 'Mi Financiera';
         return;
       }
-      updateSettings({ [name]: value });
+      updateSettings({ [name]: value } as SettingsPatch);
       if (name === 'company' || name === 'owner' || name === 'currency' || name === 'locale') {
         toast('Preferencia guardada.', 'success');
       }
@@ -311,7 +312,7 @@ export function render(root) {
   });
 
   /* Datos */
-  root.querySelectorAll('[data-action]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-action]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const action = btn.dataset.action;
       try {
@@ -341,17 +342,17 @@ export function render(root) {
   window.api?.info?.()
     .then((info) => {
       if (!info) return;
-      const pathEl = document.getElementById('data-path');
-      if (pathEl) pathEl.textContent = info.dataFile || '—';
-      const versionEl = document.querySelector('[data-about="version"]');
+      const pathEl = document.getElementById('data-path')!;
+      if (pathEl) pathEl.textContent = info.dataFile || '-';
+      const versionEl = document.querySelector<HTMLElement>('[data-about="version"]')!;
       if (versionEl) versionEl.textContent = info.version || '—';
-      const electronEl = document.querySelector('[data-about="electron"]');
+      const electronEl = document.querySelector<HTMLElement>('[data-about="electron"]')!;
       if (electronEl) electronEl.textContent = info.electron || '—';
-      const platformEl = document.querySelector('[data-about="platform"]');
+      const platformEl = document.querySelector<HTMLElement>('[data-about="platform"]')!;
       if (platformEl) platformEl.textContent = info.platform || '—';
     })
     .catch(() => {
-      const pathEl = document.getElementById('data-path');
+      const pathEl = document.getElementById('data-path')!;
       if (pathEl) pathEl.textContent = 'No disponible';
     });
 }

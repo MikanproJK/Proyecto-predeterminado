@@ -26,7 +26,7 @@ Aplicación de escritorio para administrar una cartera de préstamos, los client
 
 - Node.js 22.12 o superior.
 - Windows, macOS o Linux.
-- Electron 45 (se instala con las dependencias del proyecto).
+- Electron 45 y TypeScript 7 (se instalan con las dependencias del proyecto).
 
 ## Ejecutar
 
@@ -35,13 +35,28 @@ npm install
 npm start
 ```
 
+`npm start` compila el proyecto (`npm run build`) y abre la aplicación. El código fuente está en TypeScript y se emite a `dist/`:
+
+- `dist/main/` — proceso principal y preload (CommonJS).
+- `dist/renderer/` — interfaz, módulos ESM y recursos estáticos.
+
+La ventana principal usa un protocolo interno `app://bundle/` y no necesita servidor web ni bundler.
+
+### Comandos
+
+| Comando | Descripción |
+| --- | --- |
+| `npm start` | Compila y abre la aplicación. |
+| `npm run dev` | Compila y abre con las herramientas de desarrollo. |
+| `npm run build` | Limpia `dist/`, compila main/renderer y copia los recursos. |
+| `npm run typecheck` | Verifica los tipos de main, renderer y pruebas sin emitir archivos. |
+| `npm test` | Ejecuta la suite del motor financiero con `tsx`. |
+
 Para abrir las herramientas de desarrollo:
 
 ```bash
-npm start -- --dev
+npm run dev
 ```
-
-La ventana principal usa un protocolo interno `app://bundle/` y no necesita servidor web ni proceso de compilación.
 
 ## Pruebas
 
@@ -49,7 +64,7 @@ La ventana principal usa un protocolo interno `app://bundle/` y no necesita serv
 npm test
 ```
 
-La suite valida el motor financiero: utilidades numéricas y de fechas, conversión de tasas, los cuatro sistemas de amortización, aplicación de pagos, mora, días de gracia, agregados de cartera, series mensuales y exportación CSV.
+La suite (`tests/finance.test.ts`) valida el motor financiero: utilidades numéricas y de fechas, conversión de tasas, los cuatro sistemas de amortización, aplicación de pagos, mora, días de gracia, agregados de cartera, series mensuales y exportación CSV. Se ejecuta directamente sobre el TypeScript con `tsx`.
 
 ## Datos y respaldo
 
@@ -86,22 +101,33 @@ El archivo se escribe de forma atómica (archivo temporal + reemplazo) y la inte
 ## Estructura del proyecto
 
 ```
-main.js              Proceso principal de Electron, protocolo app://, IPC y persistencia
-preload.js           Puente seguro entre el renderer y Electron
+main.ts                Proceso principal de Electron, protocolo app://, IPC y persistencia
+preload.ts             Puente seguro entre el renderer y Electron
 src/
-  index.html         Shell de la aplicación
-  styles.css         Sistema visual, temas y estilos de todos los componentes
-  app.js             Arranque, rutas, temas, barra superior y paleta de comandos
-  actions.js         Formularios, modales, recibos, contratos, respaldos y exportaciones
-  finance.js         Motor financiero puro y utilidades de formato
-  seed.js            Datos de demostración
-  lib/               Estado, navegación, iconos, UI y temas
-  views/             Panel, clientes, préstamos, cobros, finanzas, reportes y configuración
+  index.html           Shell de la aplicación
+  styles.css           Sistema visual, temas y estilos de todos los componentes
+  types.ts             Tipos de dominio, IPC y contratos compartidos
+  app.ts               Arranque, rutas, temas, barra superior y paleta de comandos
+  actions.ts           Formularios, modales, recibos, contratos, respaldos y exportaciones
+  finance.ts           Motor financiero puro (clase LoanCalculator) y utilidades de formato
+  seed.ts              Datos de demostración
+  lib/                 Estado y persistencia (StoreRepository, SaveQueue), navegación, iconos, UI y temas
+  views/               Panel, clientes, préstamos, cobros, finanzas, reportes y configuración
 tests/
-  finance.test.mjs   Pruebas del motor financiero
+  finance.test.ts      Pruebas del motor financiero
+scripts/
+  clean.mjs            Limpia dist/
+  copy-assets.mjs      Copia HTML, CSS e imágenes al renderer compilado
+dist/                  Salida de compilación (generada, no versionada)
 ```
 
-`src/package.json` declara el directorio como ESM para que Node pueda importar `finance.js` en las pruebas.
+La compilación usa tres configuraciones:
+
+- `tsconfig.main.json` — `main.ts` y `preload.ts` en CommonJS/Node16 hacia `dist/main`.
+- `tsconfig.renderer.json` — `src/**/*.ts` en ESM hacia `dist/renderer`.
+- `tsconfig.test.json` — verificación de tipos de las pruebas.
+
+`src/package.json` declara el directorio del renderer como ESM para que los módulos compilados se resuelvan correctamente. Los recursos estáticos (`index.html`, `styles.css`, imágenes y `src/package.json`) se copian con `scripts/copy-assets.mjs`.
 
 ## Seguridad
 

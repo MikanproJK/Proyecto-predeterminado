@@ -1,6 +1,6 @@
 /* Iconos SVG inline (trazo, 24x24) */
 
-const P = {
+const P: Record<string, string> = {
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
@@ -67,12 +67,12 @@ const P = {
   'rotate-ccw': '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
 };
 
-export function icon(name, size = 18, extraClass = '') {
+export function icon(name: string, size: number | string = 18, extraClass = ''): string {
   const path = P[name] || P.info;
   return `<svg class="icon ${extraClass}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
 }
 
-export function logoSVG(size = 28, id = 'lg') {
+export function logoSVG(size: number | string = 28, id = 'lg'): string {
   return `<svg width="${size}" height="${size}" viewBox="0 0 48 48" fill="none" aria-hidden="true">
     <defs>
       <linearGradient id="logo-grad-${id}" x1="4" y1="4" x2="44" y2="44" gradientUnits="userSpaceOnUse">

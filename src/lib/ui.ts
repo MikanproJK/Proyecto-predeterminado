@@ -2,40 +2,49 @@
 
 import { icon, logoSVG } from './icons.js';
 import { money, num, round2 } from '../finance.js';
+import type { FormValues } from '../types.js';
 
 export { icon, logoSVG };
 
 let chartSeq = 0;
 
-export function esc(value) {
+export function esc(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
     '"': '&quot;',
     "'": '&#39;',
-  })[ch]);
+  })[ch] as string);
 }
 
-export function nl2br(value) {
+export function nl2br(value: unknown): string {
   return esc(value).replace(/\r?\n/g, '<br />');
 }
 
-export function debounce(fn, wait = 250) {
-  let timer = null;
-  const wrapped = (...args) => {
-    clearTimeout(timer);
+export interface DebouncedFunction<A extends unknown[]> {
+  (...args: A): void;
+  cancel(): void;
+  flush(...args: A): void;
+}
+
+export function debounce<A extends unknown[]>(fn: (...args: A) => void, wait = 250): DebouncedFunction<A> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const wrapped = ((...args: A) => {
+    if (timer) clearTimeout(timer);
     timer = setTimeout(() => fn(...args), wait);
+  }) as DebouncedFunction<A>;
+  wrapped.cancel = () => {
+    if (timer) clearTimeout(timer);
   };
-  wrapped.cancel = () => clearTimeout(timer);
-  wrapped.flush = (...args) => {
-    clearTimeout(timer);
+  wrapped.flush = (...args: A) => {
+    if (timer) clearTimeout(timer);
     fn(...args);
   };
   return wrapped;
 }
 
-export function hashString(text) {
+export function hashString(text: unknown): number {
   let hash = 0;
   for (let i = 0; i < String(text).length; i += 1) {
     hash = (hash * 31 + String(text).charCodeAt(i)) | 0;
@@ -43,7 +52,7 @@ export function hashString(text) {
   return Math.abs(hash);
 }
 
-export function initial(name) {
+export function initial(name: unknown): string {
   return (
     String(name || '?')
       .trim()
@@ -55,26 +64,48 @@ export function initial(name) {
   );
 }
 
-export function avatar(name, size = 38, extra = '') {
+export function avatar(name: unknown, size: number | string = 38, extra = ''): string {
   const hue = hashString(name) % 360;
   return `<span class="avatar ${extra}" style="--av-size:${size}px;--av-hue:${hue}" title="${esc(name)}">${esc(initial(name))}</span>`;
 }
 
 const TONES = ['success', 'danger', 'warning', 'info', 'primary', 'muted'];
 
-export function badge(text, tone = 'muted', { dot = false, className = '' } = {}) {
+export function badge(
+  text: unknown,
+  tone = 'muted',
+  { dot = false, className = '' }: { dot?: boolean; className?: string } = {},
+): string {
   const safeTone = TONES.includes(tone) ? tone : 'muted';
   return `<span class="badge badge--${safeTone} ${className}">${dot ? '<i class="dot"></i>' : ''}${esc(text)}</span>`;
 }
 
-export function progressBar(value, tone = 'primary', { thin = false, label = '' } = {}) {
+export function progressBar(
+  value: unknown,
+  tone = 'primary',
+  { thin = false, label = '' }: { thin?: boolean; label?: string } = {},
+): string {
   const pct = Math.max(0, Math.min(100, num(value) * 100));
   return `<div class="progress ${thin ? 'progress--thin' : ''}" role="progressbar" aria-valuenow="${round2(pct)}" aria-valuemin="0" aria-valuemax="100" title="${esc(label || `${pct.toFixed(0)}%`)}">
     <span class="progress-fill progress-fill--${esc(tone)}" style="width:${pct.toFixed(2)}%"></span>
   </div>`;
 }
 
-export function emptyState({ title = 'Sin datos', text = '', iconName = 'sparkles', action = '', compact = false } = {}) {
+export interface EmptyStateOptions {
+  title?: string;
+  text?: string;
+  iconName?: string;
+  action?: string;
+  compact?: boolean;
+}
+
+export function emptyState({
+  title = 'Sin datos',
+  text = '',
+  iconName = 'sparkles',
+  action = '',
+  compact = false,
+}: EmptyStateOptions = {}): string {
   return `<div class="empty ${compact ? 'empty--compact' : ''}">
     <span class="empty-icon">${icon(iconName, compact ? 22 : 30)}</span>
     <strong>${esc(title)}</strong>
@@ -83,7 +114,25 @@ export function emptyState({ title = 'Sin datos', text = '', iconName = 'sparkle
   </div>`;
 }
 
-export function statCard({ label, value, hint = '', iconName = 'chart', tone = 'primary', badgeHtml = '', extraClass = '' }) {
+export interface StatCardOptions {
+  label: string;
+  value: string;
+  hint?: string;
+  iconName?: string;
+  tone?: string;
+  badgeHtml?: string;
+  extraClass?: string;
+}
+
+export function statCard({
+  label,
+  value,
+  hint = '',
+  iconName = 'chart',
+  tone = 'primary',
+  badgeHtml = '',
+  extraClass = '',
+}: StatCardOptions): string {
   return `<article class="stat stat--${esc(tone)} ${extraClass}">
     <div class="stat-top">
       <span class="stat-icon">${icon(iconName, 19)}</span>
@@ -95,7 +144,14 @@ export function statCard({ label, value, hint = '', iconName = 'chart', tone = '
   </article>`;
 }
 
-export function tabs(items, active) {
+export interface TabItem {
+  value: string;
+  label: string;
+  icon?: string;
+  count?: number | string;
+}
+
+export function tabs(items: readonly TabItem[], active: string): string {
   return `<div class="tabs" role="tablist">
     ${items
       .map(
@@ -109,7 +165,7 @@ export function tabs(items, active) {
   </div>`;
 }
 
-export function segmented(items, active, name = 'seg') {
+export function segmented(items: readonly TabItem[], active: string, name = 'seg'): string {
   return `<div class="segmented" data-segmented="${esc(name)}">
     ${items
       .map(
@@ -122,7 +178,14 @@ export function segmented(items, active, name = 'seg') {
   </div>`;
 }
 
-export function pagination({ page, totalPages, total, label = 'registros' }) {
+export interface PaginationOptions {
+  page: number;
+  totalPages: number;
+  total: number | string;
+  label?: string;
+}
+
+export function pagination({ page, totalPages, total, label = 'registros' }: PaginationOptions): string {
   if (totalPages <= 1) {
     return `<div class="table-foot"><span>${total} ${esc(label)}</span></div>`;
   }
@@ -138,7 +201,7 @@ export function pagination({ page, totalPages, total, label = 'registros' }) {
 
 /* ---------- gráficos ---------- */
 
-function axisLabel(value) {
+function axisLabel(value: unknown): string {
   const n = num(value);
   const abs = Math.abs(n);
   if (abs >= 1000000) return `${round2(n / 1000000)}M`;
@@ -146,7 +209,7 @@ function axisLabel(value) {
   return String(round2(n));
 }
 
-function niceMax(value) {
+function niceMax(value: number): number {
   if (value <= 0) return 100;
   const magnitude = Math.pow(10, Math.floor(Math.log10(value)));
   const normalized = value / magnitude;
@@ -154,7 +217,21 @@ function niceMax(value) {
   return step * magnitude;
 }
 
-export function barChart(series, { height = 220, compact = true } = {}) {
+export interface ChartPoint {
+  label: string;
+  value: number;
+}
+
+export interface BarSeriesPoint {
+  label: string;
+  income: number;
+  expense: number;
+}
+
+export function barChart(
+  series: readonly BarSeriesPoint[],
+  { height = 220, compact = true }: { height?: number; compact?: boolean } = {},
+): string {
   const W = 700;
   const H = height;
   const pad = { top: 18, right: 10, bottom: 30, left: 44 };
@@ -200,7 +277,10 @@ export function barChart(series, { height = 220, compact = true } = {}) {
   </div>`;
 }
 
-export function areaChart(points, { height = 200, tone = 'primary' } = {}) {
+export function areaChart(
+  points: readonly ChartPoint[],
+  { height = 200, tone = 'primary' }: { height?: number; tone?: string } = {},
+): string {
   const W = 700;
   const H = height;
   const pad = { top: 16, right: 14, bottom: 26, left: 42 };
@@ -271,7 +351,21 @@ export function areaChart(points, { height = 200, tone = 'primary' } = {}) {
   </div>`;
 }
 
-export function donutChart(segments, { size = 168, thickness = 16, centerLabel = '', centerValue = '' } = {}) {
+export interface DonutSegment {
+  label: string;
+  value: number;
+  color: string;
+}
+
+export function donutChart(
+  segments: readonly DonutSegment[],
+  { size = 168, thickness = 16, centerLabel = '', centerValue = '' }: {
+    size?: number;
+    thickness?: number;
+    centerLabel?: string;
+    centerValue?: string;
+  } = {},
+): string {
   const total = segments.reduce((acc, s) => acc + num(s.value), 0);
   const radius = (size - thickness) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -305,7 +399,13 @@ export function donutChart(segments, { size = 168, thickness = 16, centerLabel =
   </div>`;
 }
 
-export function legend(items) {
+export interface LegendItem {
+  color: string;
+  label: string;
+  value?: string | number;
+}
+
+export function legend(items: readonly LegendItem[]): string {
   return `<ul class="legend">
     ${items
       .map(
@@ -319,7 +419,12 @@ export function legend(items) {
   </ul>`;
 }
 
-export function sparkline(values, tone = 'primary', width = 108, height = 34) {
+export function sparkline(
+  values: readonly unknown[],
+  tone = 'primary',
+  width = 108,
+  height = 34,
+): string {
   const vals = values.map(num);
   const max = Math.max(1, ...vals);
   const min = Math.min(...vals, 0);
@@ -333,13 +438,37 @@ export function sparkline(values, tone = 'primary', width = 108, height = 34) {
 
 /* ---------- modales ---------- */
 
-const modalStack = [];
+export interface ModalHandle {
+  root: HTMLElement;
+  body: HTMLElement;
+  close: () => void;
+}
 
-function syncBodyLock() {
+interface ModalEntry {
+  close: () => void;
+  backdrop: HTMLElement;
+}
+
+export interface ModalOptions {
+  title?: string;
+  subtitle?: string;
+  body?: string | Node;
+  footer?: string | Node;
+  size?: string;
+  className?: string;
+  closeOnBackdrop?: boolean;
+  onMount?: ((handle: ModalHandle) => void) | null;
+  onClose?: (() => void) | null;
+  headerExtra?: string;
+}
+
+const modalStack: ModalEntry[] = [];
+
+function syncBodyLock(): void {
   document.documentElement.classList.toggle('has-modal', modalStack.length > 0);
 }
 
-export function closeAllModals() {
+export function closeAllModals(): void {
   while (modalStack.length) modalStack[modalStack.length - 1].close();
 }
 
@@ -354,9 +483,9 @@ export function openModal({
   onMount = null,
   onClose = null,
   headerExtra = '',
-} = {}) {
-  const root = document.getElementById('overlay-root');
-  const previouslyFocused = document.activeElement;
+}: ModalOptions = {}): ModalHandle {
+  const root = document.getElementById('overlay-root') as HTMLElement;
+  const previouslyFocused = document.activeElement as HTMLElement | null;
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
@@ -375,21 +504,21 @@ export function openModal({
       ${footer ? `<footer class="modal-foot">${footer}</footer>` : ''}
     </div>`;
 
-  const bodyEl = backdrop.querySelector('.modal-body');
+  const bodyEl = backdrop.querySelector('.modal-body') as HTMLElement;
   if (body instanceof Node) bodyEl.append(body);
   else bodyEl.innerHTML = body;
   if (footer instanceof Node) {
-    const footEl = backdrop.querySelector('.modal-foot');
+    const footEl = backdrop.querySelector('.modal-foot') as HTMLElement;
     footEl.innerHTML = '';
     footEl.append(footer);
   }
 
   let closed = false;
-  const close = () => {
+  const close = (): void => {
     if (closed) return;
     closed = true;
     backdrop.classList.add('is-closing');
-    const remove = () => {
+    const remove = (): void => {
       backdrop.remove();
       const idx = modalStack.findIndex((m) => m.close === close);
       if (idx >= 0) modalStack.splice(idx, 1);
@@ -410,7 +539,7 @@ export function openModal({
   root.append(backdrop);
   syncBodyLock();
 
-  backdrop.querySelector('.modal-close').addEventListener('click', close);
+  backdrop.querySelector('.modal-close')!.addEventListener('click', close);
   backdrop.addEventListener('mousedown', (event) => {
     if (closeOnBackdrop && event.target === backdrop) close();
   });
@@ -421,8 +550,8 @@ export function openModal({
   void backdrop.offsetWidth;
   backdrop.classList.add('is-open');
   const focusable =
-    bodyEl.querySelector('[autofocus]') ||
-    bodyEl.querySelector('input:not([type="hidden"]), select, textarea, button');
+    bodyEl.querySelector<HTMLElement>('[autofocus]') ||
+    bodyEl.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea, button');
   if (focusable) focusable.focus({ preventScroll: true });
 
   if (typeof onMount === 'function') onMount({ root: backdrop, body: bodyEl, close });
@@ -437,6 +566,15 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+export interface ConfirmDialogOptions {
+  title?: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: string;
+  detail?: string;
+}
+
 export function confirmDialog({
   title = '¿Confirmas esta acción?',
   message = '',
@@ -444,10 +582,10 @@ export function confirmDialog({
   cancelLabel = 'Cancelar',
   tone = 'danger',
   detail = '',
-} = {}) {
+}: ConfirmDialogOptions = {}): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (value, close) => {
+    const finish = (value: boolean, close: () => void): void => {
       if (settled) return;
       settled = true;
       resolve(value);
@@ -462,15 +600,15 @@ export function confirmDialog({
         <button class="btn ${tone === 'danger' ? 'btn-danger' : 'btn-primary'}" type="button" data-confirm>${esc(confirmLabel)}</button>`,
       onClose: () => finish(false, () => {}),
     });
-    modal.root.querySelector('[data-cancel]').addEventListener('click', () => finish(false, modal.close));
-    modal.root.querySelector('[data-confirm]').addEventListener('click', () => finish(true, modal.close));
+    modal.root.querySelector('[data-cancel]')!.addEventListener('click', () => finish(false, modal.close));
+    modal.root.querySelector('[data-confirm]')!.addEventListener('click', () => finish(true, modal.close));
   });
 }
 
 /* ---------- avisos ---------- */
 
-export function toast(message, tone = 'success', title = '') {
-  const root = document.getElementById('toast-root');
+export function toast(message: unknown, tone = 'success', title = ''): void {
+  const root = document.getElementById('toast-root') as HTMLElement;
   const item = document.createElement('div');
   const iconName = tone === 'error' ? 'x-circle' : tone === 'warning' ? 'alert' : tone === 'info' ? 'info' : 'check-circle';
   item.className = `toast toast--${tone}`;
@@ -480,25 +618,52 @@ export function toast(message, tone = 'success', title = '') {
   root.append(item);
   void item.offsetWidth;
   item.classList.add('is-visible');
-  const remove = () => {
+  const remove = (): void => {
     item.classList.remove('is-visible');
     setTimeout(() => item.remove(), 220);
   };
-  item.querySelector('.toast-close').addEventListener('click', remove);
+  item.querySelector('.toast-close')!.addEventListener('click', remove);
   setTimeout(remove, 4200);
 }
 
 /* ---------- formularios ---------- */
 
-export function readForm(form) {
-  const data = {};
-  form.querySelectorAll('input[name], select[name], textarea[name]').forEach((field) => {
-    if (field.type === 'checkbox') data[field.name] = field.checked;
-    else if (field.type === 'number') data[field.name] = field.value === '' ? null : Number(field.value);
-    else if (field.multiple) data[field.name] = Array.from(field.selectedOptions).map((o) => o.value);
-    else data[field.name] = field.value.trim();
+type FormControl = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+
+export function readForm(form: HTMLElement): FormValues {
+  const data: FormValues = {};
+  form.querySelectorAll<FormControl>('input[name], select[name], textarea[name]').forEach((field) => {
+    if (field instanceof HTMLInputElement && field.type === 'checkbox') data[field.name] = field.checked;
+    else if (field instanceof HTMLInputElement && field.type === 'number') {
+      data[field.name] = field.value === '' ? null : Number(field.value);
+    } else if (field instanceof HTMLSelectElement && field.multiple) {
+      data[field.name] = Array.from(field.selectedOptions).map((o) => o.value);
+    } else data[field.name] = field.value.trim();
   });
   return data;
+}
+
+export type FieldOption = string | { value: string | number; label: string };
+
+export interface FieldOptions {
+  label: string;
+  name: string;
+  type?: string;
+  value?: string | number;
+  placeholder?: string;
+  hint?: string;
+  required?: boolean;
+  step?: string | number;
+  min?: string | number;
+  max?: string | number;
+  options?: readonly FieldOption[] | null;
+  rows?: number;
+  className?: string;
+  autofocus?: boolean;
+  disabled?: boolean;
+  prefix?: string;
+  suffix?: string;
+  list?: boolean;
 }
 
 export function field({
@@ -519,7 +684,7 @@ export function field({
   disabled = false,
   prefix = '',
   suffix = '',
-} = {}) {
+}: FieldOptions): string {
   const id = `f-${name}-${Math.random().toString(36).slice(2, 7)}`;
   const common = `id="${id}" name="${esc(name)}" class="input" ${required ? 'required' : ''} ${disabled ? 'disabled' : ''} ${
     autofocus ? 'autofocus' : ''
@@ -552,13 +717,20 @@ export function field({
   </label>`;
 }
 
-export function switchField({ label, name, checked = false, hint = '' }) {
+export interface SwitchFieldOptions {
+  label: string;
+  name: string;
+  checked?: boolean;
+  hint?: string;
+}
+
+export function switchField({ label, name, checked = false, hint = '' }: SwitchFieldOptions): string {
   return `<label class="switch-field">
     <span class="switch-copy"><strong>${esc(label)}</strong>${hint ? `<span>${esc(hint)}</span>` : ''}</span>
     <span class="switch"><input type="checkbox" name="${esc(name)}" ${checked ? 'checked' : ''} /><i></i></span>
   </label>`;
 }
 
-export function toastIcon(tone) {
+export function toastIcon(tone: string): string {
   return tone === 'error' ? 'x-circle' : 'check-circle';
 }

@@ -27,11 +27,27 @@ import {
   toast,
 } from '../lib/ui.js';
 import * as actions from '../actions.js';
+import type { ViewContext } from '../types.js';
 
-const filters = { tab: 'movements', query: '', type: 'all', account: 'all', range: 'month', page: 1 };
+interface FinanceFilters {
+  tab: string;
+  query: string;
+  type: string;
+  account: string;
+  range: string;
+  page: number;
+}
+
+interface RangeBounds {
+  from: string;
+  to: string;
+  label: string;
+}
+
+const filters: FinanceFilters = { tab: 'movements', query: '', type: 'all', account: 'all', range: 'month', page: 1 };
 const PAGE_SIZE = 14;
 
-function rangeBounds(range) {
+function rangeBounds(range: string): RangeBounds {
   const today = todayISO();
   const monthStart = `${today.slice(0, 8)}01`;
   switch (range) {
@@ -54,13 +70,13 @@ function rangeBounds(range) {
   }
 }
 
-const ACCOUNT_ICONS = { cash: 'cash', bank: 'bank', wallet: 'wallet', card: 'credit-card', other: 'wallet' };
-const ACCOUNT_LABELS = { cash: 'Efectivo', bank: 'Banco', wallet: 'Billetera', card: 'Tarjeta', other: 'Otra' };
+const ACCOUNT_ICONS: Record<string, string> = { cash: 'cash', bank: 'bank', wallet: 'wallet', card: 'credit-card', other: 'wallet' };
+const ACCOUNT_LABELS: Record<string, string> = { cash: 'Efectivo', bank: 'Banco', wallet: 'Billetera', card: 'Tarjeta', other: 'Otra' };
 
-export function render(root, ctx) {
-  const searchEl = document.activeElement;
-  const restoreSearch = searchEl && searchEl.id === 'finance-search';
-  const caret = restoreSearch ? searchEl.selectionStart : null;
+export function render(root: HTMLElement, ctx: ViewContext): void {
+  const searchEl = document.activeElement as HTMLInputElement | null;
+  const restoreSearch = !!searchEl && searchEl.id === 'finance-search';
+  const caret = restoreSearch && searchEl ? searchEl.selectionStart : null;
 
   const bounds = rangeBounds(filters.range);
   const accounts = accountBalances();
@@ -72,7 +88,7 @@ export function render(root, ctx) {
   });
   const summary = transactionsSummary(rangeTx);
 
-  const accountName = (id) => state.db.accounts.find((a) => a.id === id)?.name || '—';
+  const accountName = (id: string | null | undefined): string => state.db.accounts.find((a) => a.id === id)?.name || '—';
   const accountOptionsHtml = state.db.accounts
     .map((account) => `<option value="${esc(account.id)}" ${filters.account === account.id ? 'selected' : ''}>${esc(account.name)}</option>`)
     .join('');
@@ -213,7 +229,7 @@ export function render(root, ctx) {
     }
   </div>`;
 
-  const categoriesHtml = (kind) => {
+  const categoriesHtml = (kind: 'income' | 'expense'): string => {
     const items = state.db.categories[kind] || [];
     return `<div class="cat-column">
       <h4>${kind === 'income' ? 'Categorías de ingreso' : 'Categorías de egreso'}</h4>
@@ -315,37 +331,37 @@ export function render(root, ctx) {
     ${filters.tab === 'accounts' ? accountsHtml : movementsHtml}
   </div>`;
 
-  root.querySelectorAll('[data-tab]').forEach((tab) => {
+  root.querySelectorAll<HTMLElement>('[data-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
-      filters.tab = tab.dataset.tab;
+      filters.tab = tab.dataset.tab || 'movements';
       render(root, ctx);
     });
   });
-  root.querySelectorAll('[data-new-tx]').forEach((btn) => btn.addEventListener('click', () => actions.openTransactionModal()));
-  root.querySelector('[data-transfer]').addEventListener('click', () => actions.openTransactionModal({ type: 'transfer' }));
-  root.querySelectorAll('[data-account-new]').forEach((btn) => btn.addEventListener('click', () => actions.openAccountForm()));
-  root.querySelectorAll('[data-account-edit]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-new-tx]').forEach((btn) => btn.addEventListener('click', () => actions.openTransactionModal()));
+  root.querySelector<HTMLElement>('[data-transfer]')!.addEventListener('click', () => actions.openTransactionModal({ type: 'transfer' }));
+  root.querySelectorAll<HTMLElement>('[data-account-new]').forEach((btn) => btn.addEventListener('click', () => actions.openAccountForm()));
+  root.querySelectorAll<HTMLElement>('[data-account-edit]').forEach((btn) => {
     btn.addEventListener('click', () => actions.openAccountForm({ accountId: btn.dataset.accountEdit }));
   });
-  root.querySelectorAll('[data-account-delete]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-account-delete]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const account = state.db.accounts.find((a) => a.id === btn.dataset.accountDelete);
       if (account) actions.deleteAccountFlow(account);
     });
   });
-  root.querySelectorAll('[data-tx-edit]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-tx-edit]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const tx = state.db.transactions.find((t) => t.id === btn.dataset.txEdit);
       if (tx) actions.openTransactionEdit(tx);
     });
   });
-  root.querySelectorAll('[data-tx-delete]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-tx-delete]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const tx = state.db.transactions.find((t) => t.id === btn.dataset.txDelete);
       if (tx) actions.deleteTransactionFlow(tx);
     });
   });
-  root.querySelectorAll('[data-cat-remove]').forEach((btn) => {
+  root.querySelectorAll<HTMLElement>('[data-cat-remove]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const ok = await confirmDialog({
         title: 'Quitar categoría',
@@ -354,17 +370,17 @@ export function render(root, ctx) {
         confirmLabel: 'Quitar',
       });
       if (ok) {
-        removeCategory(btn.dataset.kind, btn.dataset.catRemove);
+        removeCategory(btn.dataset.kind || 'expense', btn.dataset.catRemove || '');
         toast('Categoría eliminada.', 'success');
       }
     });
   });
-  root.querySelectorAll('[data-cat-form]').forEach((form) => {
+  root.querySelectorAll<HTMLElement>('[data-cat-form]').forEach((form) => {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      const input = form.querySelector('[name="name"]');
+      const input = form.querySelector<HTMLInputElement>('[name="name"]')!;
       try {
-        addCategory(form.dataset.catForm, input.value);
+        addCategory(form.dataset.catForm || 'expense', input.value);
         toast('Categoría agregada.', 'success');
       } catch (err) {
         toast(err.message, 'error');
@@ -373,39 +389,39 @@ export function render(root, ctx) {
   });
 
   if (filters.tab === 'movements') {
-    const search = root.querySelector('#finance-search');
+    const search = root.querySelector<HTMLInputElement>('#finance-search')!;
     if (search) {
       search.addEventListener('input', (event) => {
-        filters.query = event.target.value;
+        filters.query = (event.target as HTMLInputElement).value;
         filters.page = 1;
         render(root, ctx);
       });
     }
-    root.querySelectorAll('[data-type]').forEach((chip) => {
+    root.querySelectorAll<HTMLElement>('[data-type]').forEach((chip) => {
       chip.addEventListener('click', () => {
-        filters.type = chip.dataset.type;
+        filters.type = chip.dataset.type || 'all';
         filters.page = 1;
         render(root, ctx);
       });
     });
-    root.querySelector('#finance-account').addEventListener('change', (event) => {
-      filters.account = event.target.value;
+    root.querySelector<HTMLSelectElement>('#finance-account')!.addEventListener('change', (event) => {
+      filters.account = (event.target as HTMLSelectElement).value;
       filters.page = 1;
       render(root, ctx);
     });
-    root.querySelector('#finance-range').addEventListener('change', (event) => {
-      filters.range = event.target.value;
+    root.querySelector<HTMLSelectElement>('#finance-range')!.addEventListener('change', (event) => {
+      filters.range = (event.target as HTMLSelectElement).value;
       filters.page = 1;
       render(root, ctx);
     });
-    root.querySelectorAll('[data-page]').forEach((btn) => {
+    root.querySelectorAll<HTMLElement>('[data-page]').forEach((btn) => {
       btn.addEventListener('click', () => {
         filters.page = Math.max(1, Number(btn.dataset.page));
         render(root, ctx);
       });
     });
-    if (restoreSearch) {
-      const el = root.querySelector('#finance-search');
+    if (restoreSearch && caret !== null) {
+      const el = root.querySelector<HTMLInputElement>('#finance-search')!;
       if (el) {
         el.focus();
         el.setSelectionRange(caret, caret);

@@ -21,8 +21,47 @@ import * as financeView from './views/finance.js';
 import * as reportsView from './views/reports.js';
 import * as settingsView from './views/settings.js';
 import { loanStateMeta, todayISO, money, addDaysISO } from './finance.js';
+import type { AppInfo, RouteName, ThemeId, ViewModule } from './types.js';
 
-const ROUTES = {
+interface QuickAction {
+  label: string;
+  icon: string;
+  action: string;
+}
+
+interface RouteMeta {
+  title: string;
+  eyebrow: string;
+  icon: string;
+  nav: string;
+  quick: QuickAction;
+}
+
+interface NavItem {
+  route: RouteName;
+  label: string;
+  icon: string;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+interface SearchItem {
+  group: string;
+  label: string;
+  sub?: string;
+  icon: string;
+  tag?: { text: string; tone: string } | null;
+  run: () => void;
+}
+
+interface QuickSearchItem extends SearchItem {
+  keywords: string;
+}
+
+const ROUTES: Record<string, RouteMeta> = {
   dashboard: {
     title: 'Panel',
     eyebrow: 'Resumen general',
@@ -88,7 +127,7 @@ const ROUTES = {
   },
 };
 
-const NAV_GROUPS = [
+const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Principal',
     items: [
@@ -111,9 +150,9 @@ const NAV_GROUPS = [
   },
 ];
 
-const NAV_ORDER = ['dashboard', 'clients', 'loans', 'payments', 'finance', 'reports', 'settings'];
+const NAV_ORDER: RouteName[] = ['dashboard', 'clients', 'loans', 'payments', 'finance', 'reports', 'settings'];
 
-const views = {
+const views: Record<RouteName, ViewModule> = {
   dashboard: dashboardView,
   clients: clientsView,
   client: clientsView,
@@ -125,15 +164,15 @@ const views = {
   settings: settingsView,
 };
 
-let routeName = 'dashboard';
-let routeId = null;
-let lastKey = null;
-let appInfo = null;
+let routeName: RouteName = 'dashboard';
+let routeId: string | null = null;
+let lastKey: string | null = null;
+let appInfo: AppInfo | null = null;
 let themePopoverOpen = false;
 
 /* ---------- apariencia ---------- */
 
-function applyAppearance() {
+function applyAppearance(): void {
   const settings = state.db.settings;
   const theme = themeMeta(settings.theme);
   document.documentElement.dataset.theme = theme.id;
@@ -148,10 +187,10 @@ function applyAppearance() {
 
 /* ---------- barra lateral ---------- */
 
-function renderSidebar() {
+function renderSidebar(): void {
   const nav = document.getElementById('sidebar-nav');
   const company = document.getElementById('sidebar-company');
-  if (!nav) return;
+  if (!nav || !company) return;
   company.textContent = state.db.settings.company || 'Mi Financiera';
 
   const overdueCount = loanViews().filter((l) => l.state === 'overdue').length;
@@ -177,11 +216,12 @@ function renderSidebar() {
         .join('')}`,
   ).join('');
 
-  nav.querySelectorAll('[data-route]').forEach((btn) => {
-    btn.addEventListener('click', () => navigate(btn.dataset.route));
+  nav.querySelectorAll<HTMLElement>('[data-route]').forEach((btn) => {
+    btn.addEventListener('click', () => navigate(btn.dataset.route || ''));
   });
 
   const foot = document.getElementById('sidebar-foot');
+  if (!foot) return;
   const balances = accountBalances();
   const cash = balances.reduce((acc, a) => acc + a.balance, 0);
   const portfolio = portfolioSummary(loanViews());
@@ -195,13 +235,15 @@ function renderSidebar() {
       <span>v${esc(appInfo?.version || '1.0.0')}</span>
     </div>`;
 
-  document.getElementById('titlebar-actions').innerHTML = `<span class="save-indicator" id="save-indicator">
+  const titlebarActions = document.getElementById('titlebar-actions');
+  if (!titlebarActions) return;
+  titlebarActions.innerHTML = `<span class="save-indicator" id="save-indicator">
     <i class="dot"></i><span>Datos locales</span>
   </span>`;
   updateSaveIndicator();
 }
 
-function updateSaveIndicator() {
+function updateSaveIndicator(): void {
   const el = document.getElementById('save-indicator');
   if (!el) return;
   el.classList.toggle('is-saving', !!state.saving);
@@ -220,8 +262,9 @@ function updateSaveIndicator() {
 
 /* ---------- menú de temas ---------- */
 
-function renderThemeMenu() {
+function renderThemeMenu(): void {
   const wrap = document.getElementById('theme-wrap');
+  if (!wrap) return;
   wrap.innerHTML = `<button class="theme-btn" id="theme-btn" type="button" title="Cambiar tema" aria-label="Cambiar tema">
       ${icon('palette', 19)}
     </button>
@@ -242,22 +285,22 @@ function renderThemeMenu() {
       </div>
     </div>`;
 
-  const btn = wrap.querySelector('#theme-btn');
-  const popover = wrap.querySelector('#theme-popover');
+  const btn = wrap.querySelector('#theme-btn') as HTMLElement;
+  const popover = wrap.querySelector('#theme-popover') as HTMLElement;
   btn.addEventListener('click', (event) => {
     event.stopPropagation();
     themePopoverOpen = !themePopoverOpen;
     popover.classList.toggle('is-open', themePopoverOpen);
     markThemeSelection();
   });
-  wrap.querySelectorAll('[data-theme-option]').forEach((option) => {
+  wrap.querySelectorAll<HTMLElement>('[data-theme-option]').forEach((option) => {
     option.addEventListener('click', () => {
-      state.db.settings.theme = option.dataset.themeOption;
+      state.db.settings.theme = (option.dataset.themeOption || 'aurora') as ThemeId;
       actions.persistSettings();
       markThemeSelection();
     });
   });
-  wrap.querySelector('[data-theme-settings]').addEventListener('click', () => {
+  wrap.querySelector('[data-theme-settings]')!.addEventListener('click', () => {
     themePopoverOpen = false;
     popover.classList.remove('is-open');
     navigate('settings');
@@ -265,12 +308,12 @@ function renderThemeMenu() {
   markThemeSelection();
 }
 
-function markThemeSelection() {
+function markThemeSelection(): void {
   const current = state.db.settings.theme;
-  document.querySelectorAll('[data-theme-option]').forEach((option) => {
+  document.querySelectorAll<HTMLElement>('[data-theme-option]').forEach((option) => {
     const active = option.dataset.themeOption === current;
     option.classList.toggle('is-active', active);
-    const check = option.querySelector('.theme-check');
+    const check = option.querySelector<HTMLElement>('.theme-check');
     if (check) check.style.visibility = active ? 'visible' : 'hidden';
   });
 }
@@ -283,10 +326,11 @@ document.addEventListener('click', () => {
 
 /* ---------- render principal ---------- */
 
-function setTopbar() {
+function setTopbar(): void {
   const meta = ROUTES[routeName] || ROUTES.dashboard;
   const titleEl = document.getElementById('page-title');
   const eyebrowEl = document.getElementById('page-eyebrow');
+  if (!titleEl || !eyebrowEl) return;
   let title = meta.title;
   let eyebrow = meta.eyebrow;
 
@@ -305,17 +349,18 @@ function setTopbar() {
   eyebrowEl.textContent = eyebrow;
 
   const quick = document.getElementById('quick-action');
+  if (!quick) return;
   quick.innerHTML = `${icon(meta.quick.icon, 16)}<span>${esc(meta.quick.label)}</span>`;
   quick.dataset.quickAction = meta.quick.action;
 
-  document.querySelectorAll('.nav-item').forEach((item) => {
+  document.querySelectorAll<HTMLElement>('.nav-item').forEach((item) => {
     item.classList.toggle('is-active', item.dataset.route === meta.nav);
   });
 }
 
-function renderCurrent() {
+function renderCurrent(): void {
   const root = document.getElementById('view-root');
-  const meta = ROUTES[routeName] || ROUTES.dashboard;
+  if (!root) return;
   setTopbar();
   const view = views[routeName] || views.dashboard;
   const key = `${routeName}/${routeId || ''}`;
@@ -329,11 +374,12 @@ function renderCurrent() {
     else root.scrollTop = 0;
   } catch (err) {
     console.error('[app] error al renderizar', err);
+    const message = err instanceof Error ? err.message : 'Error inesperado';
     root.innerHTML = `<div class="page"><div class="card"><div class="card-body">
       <div class="empty">
         <span class="empty-icon">${icon('alert', 28)}</span>
         <strong>No se pudo mostrar esta sección</strong>
-        <p>${esc(err?.message || 'Error inesperado')}</p>
+        <p>${esc(message)}</p>
         <button class="btn btn-primary" type="button" onclick="location.reload()">${icon('refresh', 16)} Recargar</button>
       </div></div></div></div>`;
   }
@@ -342,8 +388,9 @@ function renderCurrent() {
   markThemeSelection();
 }
 
-function handleQuickAction() {
+function handleQuickAction(): void {
   const button = document.getElementById('quick-action');
+  if (!button) return;
   const action = button.dataset.quickAction;
   switch (action) {
     case 'new-client':
@@ -351,8 +398,8 @@ function handleQuickAction() {
       break;
     case 'new-payment':
       actions.openPaymentModal({
-        loanId: routeName === 'loan' ? routeId : undefined,
-        clientId: routeName === 'client' ? routeId : undefined,
+        loanId: routeName === 'loan' ? routeId ?? undefined : undefined,
+        clientId: routeName === 'client' ? routeId ?? undefined : undefined,
       });
       break;
     case 'new-movement':
@@ -366,33 +413,34 @@ function handleQuickAction() {
       break;
     case 'new-loan':
     default:
-      actions.openLoanForm({ clientId: routeName === 'client' ? routeId : undefined });
+      actions.openLoanForm({ clientId: routeName === 'client' ? routeId ?? undefined : undefined });
       break;
   }
 }
 
 /* ---------- enrutado ---------- */
 
-function parseRoute() {
+function parseRoute(): void {
   const [rawRoute, ...rest] = currentPath().split('/');
   const name = rawRoute || 'dashboard';
-  routeName = ROUTES[name] ? name : 'dashboard';
+  routeName = (ROUTES[name] ? name : 'dashboard') as RouteName;
   routeId = rest.length ? decodeURIComponent(rest.join('/')) : null;
 }
 
-function onRouteChange() {
+function onRouteChange(): void {
   const previousRoute = routeName;
   const previousId = routeId;
   parseRoute();
   renderCurrent();
   if (previousRoute !== routeName || previousId !== routeId) {
-    document.getElementById('view-root').scrollTop = 0;
+    const root = document.getElementById('view-root');
+    if (root) root.scrollTop = 0;
   }
 }
 
 /* ---------- búsqueda global ---------- */
 
-function openPalette(initial = '') {
+function openPalette(initial = ''): void {
   if (document.getElementById('palette-backdrop')) return;
   const backdrop = document.createElement('div');
   backdrop.className = 'palette-backdrop';
@@ -414,22 +462,22 @@ function openPalette(initial = '') {
   void backdrop.offsetWidth;
   backdrop.classList.add('is-open');
 
-  const input = backdrop.querySelector('#palette-input');
-  const results = backdrop.querySelector('#palette-results');
-  let items = [];
+  const input = backdrop.querySelector('#palette-input') as HTMLInputElement;
+  const results = backdrop.querySelector('#palette-results') as HTMLElement;
+  let items: SearchItem[] = [];
   let activeIndex = 0;
 
-  const close = () => {
+  const close = (): void => {
     backdrop.classList.remove('is-open');
     setTimeout(() => backdrop.remove(), 160);
   };
 
-  const runItem = (item) => {
+  const runItem = (item: SearchItem): void => {
     close();
     setTimeout(() => item.run(), 60);
   };
 
-  const renderResults = () => {
+  const renderResults = (): void => {
     const query = input.value.trim().toLowerCase();
     items = buildSearchItems(query);
     if (!items.length) {
@@ -456,11 +504,14 @@ function openPalette(initial = '') {
       index += 1;
     }
     results.innerHTML = html;
-    results.querySelectorAll('[data-index]').forEach((btn) => {
-      btn.addEventListener('click', () => runItem(items[Number(btn.dataset.index)]));
+    results.querySelectorAll<HTMLElement>('[data-index]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const item = items[Number(btn.dataset.index)];
+        if (item) runItem(item);
+      });
       btn.addEventListener('mousemove', () => {
         activeIndex = Number(btn.dataset.index);
-        results.querySelectorAll('.palette-item').forEach((el) => {
+        results.querySelectorAll<HTMLElement>('.palette-item').forEach((el) => {
           el.classList.toggle('is-active', Number(el.dataset.index) === activeIndex);
         });
       });
@@ -484,7 +535,8 @@ function openPalette(initial = '') {
       renderResults();
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (items[activeIndex]) runItem(items[activeIndex]);
+      const item = items[activeIndex];
+      if (item) runItem(item);
     } else if (event.key === 'Escape') {
       event.preventDefault();
       close();
@@ -501,12 +553,13 @@ function openPalette(initial = '') {
   }
 }
 
-function buildSearchItems(query) {
+function buildSearchItems(query: string): SearchItem[] {
   const q = query.trim().toLowerCase();
-  const match = (...fields) => !q || fields.some((f) => String(f || '').toLowerCase().includes(q));
-  const results = [];
+  const match = (...fields: unknown[]): boolean =>
+    !q || fields.some((f) => String(f || '').toLowerCase().includes(q));
+  const results: SearchItem[] = [];
 
-  const quickActions = [
+  const quickActions: QuickSearchItem[] = [
     {
       group: 'Acciones',
       label: 'Nuevo préstamo',
@@ -561,7 +614,7 @@ function buildSearchItems(query) {
       label: meta.title,
       sub: meta.eyebrow,
       icon: meta.icon,
-      run: () => navigate(route),
+      run: () => navigate(route || 'dashboard'),
     });
   }
 
@@ -611,7 +664,7 @@ function buildSearchItems(query) {
 
 /* ---------- atajos ---------- */
 
-function modalIsOpen() {
+function modalIsOpen(): boolean {
   return !!document.querySelector('.modal-backdrop');
 }
 
@@ -627,7 +680,7 @@ document.addEventListener('keydown', (event) => {
   if (document.getElementById('palette-backdrop')) return;
   if (mod && key === 'n' && !event.shiftKey) {
     event.preventDefault();
-    if (!modalIsOpen()) actions.openLoanForm({ clientId: routeName === 'client' ? routeId : undefined });
+    if (!modalIsOpen()) actions.openLoanForm({ clientId: routeName === 'client' ? routeId ?? undefined : undefined });
     return;
   }
   if (mod && event.shiftKey && key === 'n') {
@@ -639,8 +692,8 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     if (!modalIsOpen()) {
       actions.openPaymentModal({
-        loanId: routeName === 'loan' ? routeId : undefined,
-        clientId: routeName === 'client' ? routeId : undefined,
+        loanId: routeName === 'loan' ? routeId ?? undefined : undefined,
+        clientId: routeName === 'client' ? routeId ?? undefined : undefined,
       });
     }
     return;
@@ -653,10 +706,13 @@ document.addEventListener('keydown', (event) => {
 
 /* ---------- arranque ---------- */
 
-async function boot() {
-  document.getElementById('boot-logo').innerHTML = logoSVG(62, 'boot');
-  document.getElementById('titlebar-logo').innerHTML = logoSVG(26, 'tb');
-  document.getElementById('sidebar-logo').innerHTML = logoSVG(40, 'side');
+async function boot(): Promise<void> {
+  const bootLogo = document.getElementById('boot-logo');
+  const titlebarLogo = document.getElementById('titlebar-logo');
+  const sidebarLogo = document.getElementById('sidebar-logo');
+  if (bootLogo) bootLogo.innerHTML = logoSVG(62, 'boot');
+  if (titlebarLogo) titlebarLogo.innerHTML = logoSVG(26, 'tb');
+  if (sidebarLogo) sidebarLogo.innerHTML = logoSVG(40, 'side');
 
   try {
     await init();
@@ -671,8 +727,8 @@ async function boot() {
   applyAppearance();
   renderCurrent();
 
-  document.getElementById('search-trigger').addEventListener('click', () => openPalette());
-  document.getElementById('quick-action').addEventListener('click', handleQuickAction);
+  document.getElementById('search-trigger')?.addEventListener('click', () => openPalette());
+  document.getElementById('quick-action')?.addEventListener('click', handleQuickAction);
 
   subscribe((type) => {
     if (type === 'save-error') {
