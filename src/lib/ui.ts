@@ -663,7 +663,6 @@ export interface FieldOptions {
   disabled?: boolean;
   prefix?: string;
   suffix?: string;
-  list?: boolean;
 }
 
 export function field({

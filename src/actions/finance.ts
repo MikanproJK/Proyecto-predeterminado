@@ -11,8 +11,15 @@ import { T, currency, accountOptions } from './shared.js';
    FINANZAS
    ============================================================ */
 
+function categoryOptions(kind: 'income' | 'expense'): string[] {
+  const items = state.db.categories[kind];
+  if (Array.isArray(items) && items.length) return items;
+  return [kind === 'income' ? 'Otro ingreso' : 'Otro egreso'];
+}
+
 export function openTransactionModal({ type = 'expense' }: { type?: string } = {}): void {
-  const categories = state.db.categories;
+  const initialKind = type === 'income' ? 'income' : 'expense';
+  const initialCategories = categoryOptions(initialKind);
   const modal = openModal({
     title: 'Nuevo movimiento',
     subtitle: 'Registra ingresos, egresos o transferencias entre cuentas.',
@@ -28,7 +35,7 @@ export function openTransactionModal({ type = 'expense' }: { type?: string } = {
         ${field({ label: 'Monto', name: 'amount', type: 'number', min: '0.01', value: '', suffix: currency(), required: true, autofocus: true })}
         ${field({ label: 'Fecha', name: 'date', type: 'date', value: T(), required: true })}
         <div class="span-2" data-category-wrap>
-          ${field({ label: 'Categoría', name: 'category', value: type === 'income' ? 'Otro ingreso' : 'Operativo', list: true })}
+          ${field({ label: 'Categoría', name: 'category', value: initialCategories[0], options: initialCategories })}
         </div>
         <div class="span-2" data-account-wrap>
           ${field({ label: 'Cuenta', name: 'accountId', value: state.db.settings.defaultAccountId, options: accountOptions(state.db.settings.defaultAccountId) })}
@@ -48,19 +55,14 @@ export function openTransactionModal({ type = 'expense' }: { type?: string } = {
   const categoryWrap = form.querySelector<HTMLElement>('[data-category-wrap]')!;
   const accountWrap = form.querySelector<HTMLElement>('[data-account-wrap]')!;
   const toAccountWrap = form.querySelector<HTMLElement>('[data-to-account-wrap]')!;
-  const categoryInput = form.querySelector<HTMLInputElement>('[name="category"]')!;
+  const categoryInput = form.querySelector<HTMLSelectElement>('[name="category"]')!;
   const descriptionInput = form.querySelector<HTMLTextAreaElement>('[name="description"]')!;
-
-  /* datalist para categorías existentes */
-  const datalist = document.createElement('datalist');
-  datalist.id = 'tx-categories';
-  form.append(datalist);
-  categoryInput.setAttribute('list', 'tx-categories');
 
   const fillCategories = (): void => {
     const kind = typeInput.value === 'income' ? 'income' : 'expense';
-    datalist.innerHTML = categories[kind].map((cat) => `<option value="${esc(cat)}"></option>`).join('');
-    categoryInput.value = categories[kind][0] || '';
+    const items = categoryOptions(kind);
+    categoryInput.innerHTML = items.map((cat) => `<option value="${esc(cat)}">${esc(cat)}</option>`).join('');
+    categoryInput.value = items[0] || '';
   };
 
   const syncType = (next: string): void => {
