@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es" data-theme="aurora" data-density="comfortable">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' app:; script-src 'self' app:; style-src 'self' 'unsafe-inline' app:; img-src 'self' data: app:; font-src 'self' data:; connect-src 'self' app:" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Préstamos Pro</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="titlebar">
+        <div class="titlebar-brand">
+          <span class="logo-mark" id="titlebar-logo"></span>
+          <span class="titlebar-name">Préstamos <b>Pro</b></span>
+        </div>
+        <div class="titlebar-drag"></div>
+        <div class="titlebar-actions" id="titlebar-actions"></div>
+      </div>
+
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="sidebar-brand">
+            <span class="logo-mark logo-mark--lg" id="sidebar-logo"></span>
+            <div class="sidebar-brand-text">
+              <strong id="sidebar-company">Mi Financiera</strong>
+              <span>Panel de gestión</span>
+            </div>
+          </div>
+          <nav class="nav" id="sidebar-nav"></nav>
+          <div class="sidebar-foot" id="sidebar-foot"></div>
+        </aside>
+
+        <main class="main">
+          <header class="topbar">
+            <div class="topbar-heading">
+              <span class="topbar-eyebrow" id="page-eyebrow">Resumen general</span>
+              <h1 class="topbar-title" id="page-title">Panel</h1>
+            </div>
+            <div class="topbar-tools">
+              <button class="search-trigger" id="search-trigger" type="button" aria-label="Buscar">
+                <span class="search-trigger-icon" data-icon="search"></span>
+                <span class="search-trigger-text">Buscar clientes, préstamos…</span>
+                <kbd>Ctrl K</kbd>
+              </button>
+              <div class="theme-wrap" id="theme-wrap"></div>
+              <button class="btn btn-primary" id="quick-action" type="button"></button>
+            </div>
+          </header>
+
+          <div class="content" id="view-root" tabindex="-1"></div>
+        </main>
+      </div>
+    </div>
+
+    <div id="overlay-root"></div>
+    <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+    <div id="boot" class="boot">
+      <div class="boot-card">
+        <div class="boot-logo" id="boot-logo"></div>
+        <h1>Préstamos Pro</h1>
+        <p>Preparando tu información…</p>
+        <div class="boot-bar"><span></span></div>
+      </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "prestamos-pro",
+  "productName": "Préstamos Pro",
+  "version": "1.0.0",
+  "description": "Suite de escritorio para administrar préstamos, clientes y finanzas",
+  "main": "main.js",
+  "author": "Préstamos Pro",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node tests/finance.test.mjs"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0"
+  }
+}
