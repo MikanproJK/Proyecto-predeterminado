@@ -98,27 +98,6 @@ export const DENSITIES: readonly OptionMeta<Density>[] = [
   { value: 'compact', label: 'Compacta' },
 ];
 
-export const CURRENCIES: readonly OptionMeta[] = [
-  { value: 'USD', label: 'USD · Dólar estadounidense' },
-  { value: 'EUR', label: 'EUR · Euro' },
-  { value: 'MXN', label: 'MXN · Peso mexicano' },
-  { value: 'COP', label: 'COP · Peso colombiano' },
-  { value: 'ARS', label: 'ARS · Peso argentino' },
-  { value: 'CLP', label: 'CLP · Peso chileno' },
-  { value: 'PEN', label: 'PEN · Sol peruano' },
-  { value: 'UYU', label: 'UYU · Peso uruguayo' },
-  { value: 'BOB', label: 'BOB · Boliviano' },
-  { value: 'PYG', label: 'PYG · Guaraní' },
-  { value: 'BRL', label: 'BRL · Real brasileño' },
-  { value: 'DOP', label: 'DOP · Peso dominicano' },
-  { value: 'GTQ', label: 'GTQ · Quetzal' },
-  { value: 'HNL', label: 'HNL · Lempira' },
-  { value: 'NIO', label: 'NIO · Córdoba' },
-  { value: 'CRC', label: 'CRC · Colón costarricense' },
-  { value: 'PAB', label: 'PAB · Balboa' },
-  { value: 'VES', label: 'VES · Bolívar' },
-];
-
 export const LOCALES: readonly OptionMeta[] = [
   { value: 'es-419', label: 'Español (Latinoamérica)' },
   { value: 'es-MX', label: 'Español (México)' },

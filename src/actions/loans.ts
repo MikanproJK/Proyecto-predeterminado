@@ -5,7 +5,7 @@ import { money, num, computeLoan, formatDate, periodRate, FREQUENCIES, AMORTIZAT
 import { openModal, confirmDialog, toast, field, switchField, readForm, esc, icon } from '../lib/ui.js';
 import { navigate } from '../lib/nav.js';
 import type { Amortization, Frequency, LoanInput, LoanPatch, LoanTerms, LoanView, RateType } from '../types.js';
-import { T, currency, accountOptions, clientOptions, defaultFirstDue } from './shared.js';
+import { T, currency, currencyMin, currencyStep, accountOptions, clientOptions, defaultFirstDue } from './shared.js';
 import { openClientForm } from './clients.js';
 
 /* ============================================================
@@ -67,6 +67,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
   };
 
   const lateFeeSuffix = () => (String(draft.lateFeeType).startsWith('percent') ? '%' : currency());
+  const lateFeeStep = (type: string): string => (String(type).startsWith('percent') ? '0.01' : currencyStep());
 
   const clientSelectOptions = clientOptions(draft.clientId);
   const feeOptions = LATE_FEE_TYPES.map((option) => ({ value: option.value, label: option.label }));
@@ -84,7 +85,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
             <button class="btn btn-outline btn-sm" type="button" data-add-client>${icon('user-plus', 15)} Nuevo</button>
           </div>
         </div>
-        ${field({ label: 'Monto del capital', name: 'principal', type: 'number', value: draft.principal, min: '0.01', suffix: currency(), required: true })}
+        ${field({ label: 'Monto del capital', name: 'principal', type: 'number', value: draft.principal, min: currencyMin(), step: currencyStep(), suffix: currency(), required: true })}
         ${field({ label: 'Cuenta de desembolso', name: 'accountId', value: draft.accountId, options: accountOptions(draft.accountId) })}
         ${field({ label: 'Fecha de entrega', name: 'startDate', type: 'date', value: draft.startDate, required: true })}
         ${field({ label: 'Primer vencimiento', name: 'firstDueDate', type: 'date', value: draft.firstDueDate, required: true, hint: 'Se calcula automáticamente según la frecuencia.' })}
@@ -103,7 +104,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
         <div data-custom-days class="${draft.frequency === 'custom' ? '' : 'hidden'}">
           ${field({ label: 'Días entre cuotas', name: 'customDays', type: 'number', value: draft.customDays, min: '1', step: '1' })}
         </div>
-        ${field({ label: 'Cargo o comisión inicial', name: 'fees', type: 'number', value: draft.fees, min: '0', suffix: currency(), hint: 'Se suma a la primera cuota.' })}
+        ${field({ label: 'Cargo o comisión inicial', name: 'fees', type: 'number', value: draft.fees, min: '0', step: currencyStep(), suffix: currency(), hint: 'Se suma a la primera cuota.' })}
       </div>
     </div>
 
@@ -112,7 +113,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
       <div class="form-grid">
         ${field({ label: 'Cálculo de mora', name: 'lateFeeType', value: draft.lateFeeType, options: feeOptions })}
         <div data-late-value class="${draft.lateFeeType === 'none' ? 'hidden' : ''}">
-          ${field({ label: 'Valor de la mora', name: 'lateFeeValue', type: 'number', value: draft.lateFeeValue, min: '0', step: '0.01', suffix: lateFeeSuffix() })}
+          ${field({ label: 'Valor de la mora', name: 'lateFeeValue', type: 'number', value: draft.lateFeeValue, min: '0', step: lateFeeStep(draft.lateFeeType), suffix: lateFeeSuffix() })}
         </div>
         ${field({ label: 'Días de gracia', name: 'graceDays', type: 'number', value: draft.graceDays, min: '0', step: '1' })}
         ${field({ label: 'Garantía', name: 'guarantee', value: draft.guarantee, placeholder: 'Ej. vehículo, mercancía, aval…' })}
@@ -126,7 +127,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
     <div class="form-grid" style="margin-top:16px">
       ${field({ label: 'Cálculo de mora', name: 'lateFeeType', value: draft.lateFeeType, options: feeOptions })}
       <div data-late-value class="${draft.lateFeeType === 'none' ? 'hidden' : ''}">
-        ${field({ label: 'Valor de la mora', name: 'lateFeeValue', type: 'number', value: draft.lateFeeValue, min: '0', step: '0.01', suffix: lateFeeSuffix() })}
+        ${field({ label: 'Valor de la mora', name: 'lateFeeValue', type: 'number', value: draft.lateFeeValue, min: '0', step: lateFeeStep(draft.lateFeeType), suffix: lateFeeSuffix() })}
       </div>
       ${field({ label: 'Días de gracia', name: 'graceDays', type: 'number', value: draft.graceDays, min: '0', step: '1' })}
       ${field({ label: 'Garantía', name: 'guarantee', value: draft.guarantee })}
@@ -160,7 +161,10 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
     if (customWrap) customWrap.classList.toggle('hidden', freqSelect.value !== 'custom');
     lateWrap.classList.toggle('hidden', lateSelect.value === 'none');
     const suffix = form.querySelector<HTMLElement>('[data-late-value] .input-affix--suffix')!;
-    if (suffix) suffix.textContent = String(lateSelect.value).startsWith('percent') ? '%' : currency();
+    const isPercent = String(lateSelect.value).startsWith('percent');
+    if (suffix) suffix.textContent = isPercent ? '%' : currency();
+    const lateValue = form.querySelector<HTMLInputElement>('[data-late-value] [name="lateFeeValue"]');
+    if (lateValue) lateValue.step = lateFeeStep(lateSelect.value);
   };
 
   const refreshPreview = (): void => {

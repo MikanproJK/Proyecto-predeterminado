@@ -1,11 +1,11 @@
 /* Acciones de cobros y pagos */
 
 import { state, addPayment, updatePayment, deletePayment, paymentsFor } from '../lib/store.js';
-import { money, num, round2, computeLoan, simulatePayment, formatDate, PAYMENT_METHODS, loanStateMeta, nextInstallment } from '../finance.js';
+import { money, num, computeLoan, simulatePayment, formatDate, PAYMENT_METHODS, loanStateMeta, nextInstallment } from '../finance.js';
 import { openModal, confirmDialog, toast, field, switchField, readForm, esc, icon, avatar } from '../lib/ui.js';
 
 import type { LoanView, Payment, PaymentInput, PaymentPatch } from '../types.js';
-import { T, currency, accountOptions, loanOptions } from './shared.js';
+import { T, currency, currencyMin, currencyStep, currencyRound, accountOptions, loanOptions } from './shared.js';
 import { openReceipt } from './documents.js';
 
 /* ============================================================
@@ -41,7 +41,7 @@ export function openPaymentModal({ loanId = null, clientId = null }: OpenPayment
           ${field({ label: 'Préstamo', name: 'loanId', value: initialLoanId, options: loans, required: true })}
         </div>
         <div class="span-2" id="payment-loan-summary"></div>
-        ${field({ label: 'Monto recibido', name: 'amount', type: 'number', value: round2(suggested), min: '0.01', suffix: currency(), required: true, autofocus: true })}
+        ${field({ label: 'Monto recibido', name: 'amount', type: 'number', value: currencyRound(suggested), min: currencyMin(), step: currencyStep(), suffix: currency(), required: true, autofocus: true })}
         ${field({ label: 'Fecha del pago', name: 'date', type: 'date', value: T(), required: true })}
         ${field({ label: 'Método', name: 'method', value: 'Efectivo', options: PAYMENT_METHODS })}
         ${field({ label: 'Cuenta de destino', name: 'accountId', value: state.db.settings.defaultAccountId, options: accountOptions(state.db.settings.defaultAccountId) })}
@@ -125,11 +125,11 @@ export function openPaymentModal({ loanId = null, clientId = null }: OpenPayment
   const applyQuickAmount = (kind: string): void => {
     const view = currentLoan();
     if (!view) return;
-    if (kind === 'full') amountInput.value = String(round2(view.totals.balance));
-    else if (kind === 'next') amountInput.value = String(round2(view.totals.nextDueAmount || view.totals.balance));
+    if (kind === 'full') amountInput.value = String(currencyRound(view.totals.balance));
+    else if (kind === 'next') amountInput.value = String(currencyRound(view.totals.nextDueAmount || view.totals.balance));
     else {
       const next = nextInstallment(view);
-      amountInput.value = String(round2((next ? next.interest : view.totals.remainingInterest) + (next?.lateDue || 0)));
+      amountInput.value = String(currencyRound((next ? next.interest : view.totals.remainingInterest) + (next?.lateDue || 0)));
     }
     refreshPreview();
   };
@@ -141,7 +141,7 @@ export function openPaymentModal({ loanId = null, clientId = null }: OpenPayment
   const syncLoanDefaults = (): void => {
     const view = currentLoan();
     if (!view) return;
-    amountInput.value = String(round2(view.totals.nextDueAmount || view.totals.balance));
+    amountInput.value = String(currencyRound(view.totals.nextDueAmount || view.totals.balance));
     refreshSummary();
     refreshPreview();
   };
@@ -189,7 +189,7 @@ export function openPaymentEdit(payment: Payment): void {
     size: 'md',
     body: `<div class="form-note form-note--info">${icon('info', 16)}<div>${esc(loan?.code || '')} · ${esc(client?.name || '')}</div></div>
       <form id="payment-edit" class="form-grid mt-2" autocomplete="off">
-        ${field({ label: 'Monto', name: 'amount', type: 'number', value: payment.amount, min: '0.01', suffix: currency(), required: true })}
+        ${field({ label: 'Monto', name: 'amount', type: 'number', value: currencyRound(payment.amount), min: currencyMin(), step: currencyStep(), suffix: currency(), required: true })}
         ${field({ label: 'Fecha', name: 'date', type: 'date', value: payment.date, required: true })}
         ${field({ label: 'Método', name: 'method', value: payment.method, options: PAYMENT_METHODS })}
         ${field({ label: 'Cuenta', name: 'accountId', value: payment.accountId, options: accountOptions(payment.accountId) })}

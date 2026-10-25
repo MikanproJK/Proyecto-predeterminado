@@ -1,6 +1,7 @@
 /* Utilidades compartidas por las acciones */
 
 import { state, paymentsFor } from '../lib/store.js';
+import { currencyMeta, roundToCurrency } from '../lib/currencies.js';
 import { money, num, addDaysISO, addMonthsISO, computeLoan, todayISO } from '../finance.js';
 
 export interface SelectOption {
@@ -11,7 +12,22 @@ export interface SelectOption {
 export const T = (): string => todayISO();
 
 export function currency(): string {
-  return state.db.settings.currency || 'USD';
+  return currencyMeta(state.db.settings.currency).symbol;
+}
+
+/** Paso de los campos monetarios según los decimales de la moneda. */
+export function currencyStep(): string {
+  return currencyMeta(state.db.settings.currency).decimals === 0 ? '1' : '0.01';
+}
+
+/** Valor mínimo de los campos monetarios según los decimales de la moneda. */
+export function currencyMin(): string {
+  return currencyMeta(state.db.settings.currency).decimals === 0 ? '1' : '0.01';
+}
+
+/** Redondea un importe a los decimales que usa la moneda activa. */
+export function currencyRound(value: unknown): number {
+  return roundToCurrency(num(value), state.db.settings.currency);
 }
 
 export function accountOptions(

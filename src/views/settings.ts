@@ -1,7 +1,7 @@
 /* Configuración: apariencia, negocio, valores por defecto y datos */
 
 import { state, updateSettings } from '../lib/store.js';
-import { num, LATE_FEE_TYPES } from '../finance.js';
+import { num, money, LATE_FEE_TYPES } from '../finance.js';
 import {
   icon,
   esc,
@@ -12,7 +12,8 @@ import {
   confirmDialog,
   toast,
 } from '../lib/ui.js';
-import { THEMES, DENSITIES, CURRENCIES, LOCALES, themeMeta } from '../lib/themes.js';
+import { THEMES, DENSITIES, LOCALES, themeMeta } from '../lib/themes.js';
+import { CURRENCY_OPTIONS, currencyLabel, currencyMeta } from '../lib/currencies.js';
 import * as actions from '../actions.js';
 import type { Density, Settings, SettingsPatch, ThemeId, ViewContext } from '../types.js';
 
@@ -71,6 +72,7 @@ function appearanceCard(settings: Settings) {
 
 function businessCard(settings: Settings) {
   const accountOptions = state.db.accounts.map((account) => ({ value: account.id, label: account.name }));
+  const meta = currencyMeta(settings.currency);
   return `<section class="card">
     <div class="card-head">
       <div class="card-heading">
@@ -82,19 +84,32 @@ function businessCard(settings: Settings) {
       <div class="form-grid" id="settings-business">
         ${field({ label: 'Nombre del negocio', name: 'company', value: settings.company || '', placeholder: 'Mi Financiera', required: true })}
         ${field({ label: 'Responsable', name: 'owner', value: settings.owner || '', placeholder: 'Tu nombre' })}
-        ${field({ label: 'Moneda', name: 'currency', value: settings.currency, options: CURRENCIES })}
+        ${field({ label: 'Moneda', name: 'currency', value: meta.code, options: CURRENCY_OPTIONS })}
         ${field({ label: 'Formato regional', name: 'locale', value: settings.locale, options: LOCALES })}
         ${field({ label: 'Cuenta predeterminada', name: 'defaultAccountId', value: settings.defaultAccountId, options: accountOptions, className: 'span-2' })}
+        <div class="currency-preview span-2">
+          <div class="currency-preview-main">
+            <span class="currency-preview-label">Vista previa</span>
+            <strong class="currency-preview-value">${money(1234567.89)}</strong>
+          </div>
+          <div class="currency-preview-meta">
+            <span>${esc(currencyLabel(meta.code))}</span>
+            <span>${meta.decimals === 0 ? 'Sin decimales' : `${meta.decimals} decimales`} · símbolo ${esc(meta.symbol)}</span>
+          </div>
+        </div>
       </div>
       <div class="form-note form-note--info mt-2">
         ${icon('info', 16)}
-        <div>Cambiar la moneda o el formato regional actualiza los importes de toda la aplicación. Los valores guardados no se convierten.</div>
+        <div>Cambiar la moneda o el formato regional actualiza los símbolos y decimales de toda la aplicación. Los valores guardados no se convierten.</div>
       </div>
     </div>
   </section>`;
 }
 
 function loanDefaultsCard(settings: Settings) {
+  const meta = currencyMeta(settings.currency);
+  const lateIsPercent = String(settings.lateFeeType || '').startsWith('percent');
+  const lateStep = lateIsPercent || meta.decimals > 0 ? '0.01' : '1';
   return `<section class="card">
     <div class="card-head">
       <div class="card-heading">
@@ -105,7 +120,7 @@ function loanDefaultsCard(settings: Settings) {
     <div class="card-body">
       <div class="form-grid" id="settings-loans">
         ${field({ label: 'Cálculo de mora', name: 'lateFeeType', value: settings.lateFeeType || 'none', options: LATE_FEE_TYPES })}
-        ${field({ label: 'Valor de la mora', name: 'lateFeeValue', type: 'number', value: settings.lateFeeValue ?? 0, min: '0', step: '0.01', suffix: String(settings.lateFeeType || '').startsWith('percent') ? '%' : '' })}
+        ${field({ label: 'Valor de la mora', name: 'lateFeeValue', type: 'number', value: settings.lateFeeValue ?? 0, min: '0', step: lateStep, suffix: lateIsPercent ? '%' : meta.symbol })}
         ${field({ label: 'Días de gracia', name: 'graceDays', type: 'number', value: settings.graceDays ?? 0, min: '0', step: '1' })}
       </div>
       <div class="divider"></div>
@@ -197,7 +212,7 @@ function aboutCard(settings: Settings) {
         <div class="about-row"><span>Versión</span><strong data-about="version">1.0.0</strong></div>
         <div class="about-row"><span>Electron</span><strong data-about="electron">—</strong></div>
         <div class="about-row"><span>Plataforma</span><strong data-about="platform">—</strong></div>
-        <div class="about-row"><span>Moneda</span><strong>${esc(settings.currency)}</strong></div>
+        <div class="about-row"><span>Moneda</span><strong>${esc(currencyLabel(settings.currency))} (${esc(currencyMeta(settings.currency).symbol)})</strong></div>
         <div class="about-row"><span>Última actualización</span><strong>${esc(String(settings.updatedAt || state.db.updatedAt || '').slice(0, 10) || '—')}</strong></div>
       </div>
       <div class="settings-actions">
@@ -305,7 +320,9 @@ export function render(root: HTMLElement, _ctx: ViewContext): void {
         return;
       }
       updateSettings({ [name]: value } as SettingsPatch);
-      if (name === 'company' || name === 'owner' || name === 'currency' || name === 'locale') {
+      if (name === 'currency') {
+        toast(`Moneda actualizada a ${currencyLabel(String(value))}. Los importes no se convierten.`, 'info');
+      } else if (name === 'company' || name === 'owner' || name === 'locale') {
         toast('Preferencia guardada.', 'success');
       }
     });

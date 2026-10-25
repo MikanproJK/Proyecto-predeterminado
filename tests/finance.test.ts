@@ -16,7 +16,11 @@ import {
   toCSV,
   periodRate,
   uid,
+  configureFormat,
+  money,
+  number,
 } from '../src/finance.js';
+import { currencyMeta, roundToCurrency } from '../src/lib/currencies.js';
 import type { LoanTerms, TransactionLike } from '../src/types.js';
 
 let passed = 0;
@@ -254,6 +258,57 @@ test('monthlySeries agrupa por mes y respeta el ancla', () => {
   close(series[1].expense, 4);
   close(series[2].income, 7);
 });
+
+console.log('Formato de moneda');
+
+test('el registro reconoce monedas y usa USD como respaldo', () => {
+  assert.equal(currencyMeta('clp').symbol, '$');
+  assert.equal(currencyMeta('CLP').decimals, 0);
+  assert.equal(currencyMeta('USD').symbol, 'US$');
+  assert.equal(currencyMeta('USD').decimals, 2);
+  assert.equal(currencyMeta('XYZ').code, 'USD');
+  assert.equal(currencyMeta(null).code, 'USD');
+});
+
+test('roundToCurrency respeta los decimales de la moneda', () => {
+  assert.equal(roundToCurrency(1234.5, 'CLP'), 1235);
+  assert.equal(roundToCurrency(1234.4, 'CLP'), 1234);
+  assert.equal(roundToCurrency(1234.567, 'USD'), 1234.57);
+  assert.equal(roundToCurrency(1234.5, 'JPY'), 1235);
+});
+
+test('USD y CLP se distinguen por símbolo y decimales', () => {
+  configureFormat({ currency: 'USD', locale: 'es-CL' });
+  assert.equal(money(1234.5), 'US$1.234,50');
+  assert.equal(money(0), 'US$0,00');
+  assert.equal(money(-1234.5), '-US$1.234,50');
+  assert.equal(money(1234.5, { sign: true }), '+US$1.234,50');
+
+  configureFormat({ currency: 'CLP', locale: 'es-CL' });
+  assert.equal(money(1234.5), '$1.235');
+  assert.equal(money(1000), '$1.000');
+  assert.equal(money(-1234.5), '-$1.235');
+  assert.equal(money(2500000, { compact: true }), '$2,5M');
+});
+
+test('el formato regional cambia los separadores y otros símbolos', () => {
+  configureFormat({ currency: 'USD', locale: 'es-419' });
+  assert.equal(money(1234.5), 'US$1,234.50');
+  configureFormat({ currency: 'EUR', locale: 'es-ES' });
+  assert.equal(money(1234.5), '€1.234,50');
+  configureFormat({ currency: 'JPY', locale: 'ja-JP' });
+  assert.equal(money(1234.5), '¥1,235');
+  configureFormat({ currency: 'XYZ', locale: 'es-419' });
+  assert.equal(money(10), 'US$10.00');
+});
+
+test('number respeta los decimales solicitados sin reutilizar el formato anterior', () => {
+  configureFormat({ currency: 'USD', locale: 'es-CL' });
+  assert.equal(number(1234.5, 0), '1.235');
+  assert.equal(number(1234.5, 2), '1.234,50');
+});
+
+configureFormat({ currency: 'USD', locale: 'es-419' });
 
 console.log('Exportación CSV');
 

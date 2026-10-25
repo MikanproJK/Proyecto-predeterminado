@@ -4430,6 +4430,49 @@ html.has-modal {
   word-break: break-all;
 }
 
+.currency-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.currency-preview-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.currency-preview-label {
+  font-size: 0.65rem;
+  font-weight: 620;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-mute);
+}
+
+.currency-preview-value {
+  font-size: 1.35rem;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.currency-preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: right;
+  font-size: 0.72rem;
+  color: var(--text-soft);
+}
+
 .about-list {
   display: flex;
   flex-direction: column;

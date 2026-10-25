@@ -13,6 +13,7 @@ import {
   buildSchedule,
   portfolioSummary,
 } from '../finance.js';
+import { currencyMeta } from './currencies.js';
 import { demoDatabase } from '../seed.js';
 import type {
   Account,
@@ -109,6 +110,8 @@ class StoreRepository {
       }
     }
     if (!db.accounts.length) db.accounts = this.defaultAccounts();
+    db.settings.currency = currencyMeta(db.settings.currency).code;
+    if (!db.settings.locale) db.settings.locale = 'es-419';
     if (!db.settings.defaultAccountId || !db.accounts.some((a) => a.id === db.settings.defaultAccountId)) {
       db.settings.defaultAccountId = db.accounts[0].id;
     }

@@ -28,6 +28,8 @@ import type {
   TransactionLike,
   TransactionsSummary,
 } from './types.js';
+import { currencyMeta, DEFAULT_CURRENCY } from './lib/currencies.js';
+import type { CurrencyMeta } from './lib/currencies.js';
 
 const DAY_MS = 86400000;
 
@@ -124,60 +126,104 @@ interface FormatConfig {
   locale?: string;
 }
 
-let FORMAT: Required<FormatConfig> = { currency: 'USD', locale: 'es-419' };
-let moneyFmt: Intl.NumberFormat | null = null;
-let numFmt: Intl.NumberFormat | null = null;
+interface MoneyFormatter {
+  key: string;
+  meta: CurrencyMeta;
+  decimal: Intl.NumberFormat;
+}
+
+let FORMAT: Required<FormatConfig> = { currency: DEFAULT_CURRENCY, locale: 'es-419' };
+let moneyFmt: MoneyFormatter | null = null;
+const compactFmts = new Map<string, Intl.NumberFormat>();
+const numberFmts = new Map<string, Intl.NumberFormat>();
 
 export function configureFormat({ currency, locale }: FormatConfig = {}): void {
   if (currency) FORMAT.currency = currency;
   if (locale) FORMAT.locale = locale;
   moneyFmt = null;
-  numFmt = null;
+  compactFmts.clear();
+  numberFmts.clear();
 }
 
 export function getFormat(): Required<FormatConfig> {
   return { ...FORMAT };
 }
 
-function buildMoney(): Intl.NumberFormat {
-  if (moneyFmt) return moneyFmt;
+function buildMoney(): MoneyFormatter {
+  const meta = currencyMeta(FORMAT.currency);
+  const locale = FORMAT.locale || 'es-419';
+  const key = `${meta.code}|${locale}|${meta.decimals}`;
+  if (moneyFmt?.key === key) return moneyFmt;
+  const options: Intl.NumberFormatOptions = {
+    minimumFractionDigits: meta.decimals,
+    maximumFractionDigits: meta.decimals,
+    useGrouping: true,
+  };
+  let decimal: Intl.NumberFormat;
   try {
-    moneyFmt = new Intl.NumberFormat(FORMAT.locale || 'es-419', {
-      style: 'currency',
-      currency: FORMAT.currency || 'USD',
-      currencyDisplay: 'narrowSymbol',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    decimal = new Intl.NumberFormat(locale, options);
   } catch {
-    moneyFmt = new Intl.NumberFormat('es-419', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-    });
+    decimal = new Intl.NumberFormat('es-419', options);
   }
+  moneyFmt = { key, meta, decimal };
   return moneyFmt;
+}
+
+function buildCompact(digits: number): Intl.NumberFormat {
+  const locale = FORMAT.locale || 'es-419';
+  const key = `${locale}|${digits}`;
+  const cached = compactFmts.get(key);
+  if (cached) return cached;
+  const options: Intl.NumberFormatOptions = {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    useGrouping: true,
+  };
+  let fmt: Intl.NumberFormat;
+  try {
+    fmt = new Intl.NumberFormat(locale, options);
+  } catch {
+    fmt = new Intl.NumberFormat('es-419', options);
+  }
+  compactFmts.set(key, fmt);
+  return fmt;
 }
 
 export function money(value: unknown, { sign = false, compact = false }: { sign?: boolean; compact?: boolean } = {}): string {
   const n = num(value);
-  if (compact && Math.abs(n) >= 1000000) {
-    const f = buildMoney().format(n / 1000000);
-    return `${f.replace(/\d{3}.*?(?=\D|$)/, '')}M`;
+  const { meta, decimal } = buildMoney();
+  const negative = n < 0;
+  const abs = Math.abs(n);
+  let body: string;
+  if (compact && abs >= 1000000) {
+    const scaled = abs / 1000000;
+    const digits = scaled >= 100 ? 0 : 1;
+    body = `${buildCompact(digits).format(scaled)}M`;
+  } else {
+    body = decimal.format(abs);
   }
-  const text = buildMoney().format(n);
-  if (sign && n > 0) return `+${text}`;
-  return text;
+  const prefix = negative ? '-' : sign && n > 0 ? '+' : '';
+  return `${prefix}${meta.symbol}${body}`;
 }
 
 export function number(value: unknown, digits = 0): string {
-  if (!numFmt) {
-    numFmt = new Intl.NumberFormat(FORMAT.locale || 'es-419', {
-      minimumFractionDigits: digits,
-      maximumFractionDigits: Math.max(digits, 2),
-    });
+  const locale = FORMAT.locale || 'es-419';
+  const min = Math.max(0, Math.round(digits));
+  const key = `${locale}|${min}`;
+  let fmt = numberFmts.get(key);
+  if (!fmt) {
+    const options: Intl.NumberFormatOptions = {
+      minimumFractionDigits: min,
+      maximumFractionDigits: min,
+    };
+    try {
+      fmt = new Intl.NumberFormat(locale, options);
+    } catch {
+      fmt = new Intl.NumberFormat('es-419', options);
+    }
+    numberFmts.set(key, fmt);
   }
-  return numFmt.format(num(value));
+  return fmt.format(num(value));
 }
 
 export function pct(value: unknown, digits = 0): string {

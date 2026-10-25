@@ -19,6 +19,7 @@ Aplicación de escritorio para administrar una cartera de préstamos, los client
 - **Finanzas** con cuentas (efectivo, banco, billetera, tarjeta), ingresos, egresos, transferencias y categorías personalizables. Los movimientos generados por préstamos y pagos quedan vinculados y no se editan por separado.
 - **Reportes** por período: resumen, flujo de caja, cobranza, cartera, composición, gastos por categoría, mejores clientes, rentabilidad por préstamo y exportación CSV / impresión.
 - **Configuración**: siete temas suaves (Aurora, Océano, Bosque, Arena, Rosa, Medianoche y Noir), densidad, escala de texto, datos del negocio, moneda, formato regional, valores por defecto de préstamos, respaldo, restauración y datos de demostración.
+- **Monedas reales**: cada moneda usa su propio símbolo y cantidad de decimales. USD (`US$`) y CLP (`$`, sin decimales) están priorizados; también se admiten EUR, MXN, COP, ARS, PEN, UYU, BOB, PYG, BRL, DOP, GTQ, HNL, NIO, CRC, PAB, VES, CAD, GBP, AUD, CHF, JPY, CNY, INR, RUB y ZAR. La moneda es global para toda la aplicación y los importes guardados no se convierten al cambiarla.
 - **Búsqueda global** y paleta de comandos con `Ctrl+K`.
 - **Documentos**: contrato de préstamo y recibo de pago listos para imprimir o guardar como PDF.
 
@@ -135,6 +136,7 @@ src/
     icons.ts           Iconografía SVG
     ui.ts              Componentes de interfaz reutilizables
     themes.ts          Definición de los siete temas
+    currencies.ts      Registro de monedas, símbolos y decimales
   views/               Panel, clientes, préstamos, cobros, finanzas, reportes y configuración
 tests/
   finance.test.ts      Pruebas del motor financiero

@@ -5,7 +5,7 @@ import { money, num } from '../finance.js';
 import { openModal, confirmDialog, toast, field, readForm, esc, icon } from '../lib/ui.js';
 
 import type { Account, AccountInput, Transaction, TransactionInput, TransactionPatch, TransferInput } from '../types.js';
-import { T, currency, accountOptions } from './shared.js';
+import { T, currency, currencyMin, currencyStep, accountOptions } from './shared.js';
 
 /* ============================================================
    FINANZAS
@@ -32,7 +32,7 @@ export function openTransactionModal({ type = 'expense' }: { type?: string } = {
       </div>
       <input type="hidden" name="type" value="${esc(type)}" />
       <div class="form-grid mt-2">
-        ${field({ label: 'Monto', name: 'amount', type: 'number', min: '0.01', value: '', suffix: currency(), required: true, autofocus: true })}
+        ${field({ label: 'Monto', name: 'amount', type: 'number', min: currencyMin(), step: currencyStep(), value: '', suffix: currency(), required: true, autofocus: true })}
         ${field({ label: 'Fecha', name: 'date', type: 'date', value: T(), required: true })}
         <div class="span-2" data-category-wrap>
           ${field({ label: 'Categoría', name: 'category', value: initialCategories[0], options: initialCategories })}
@@ -112,7 +112,7 @@ export function openTransactionEdit(tx: Transaction): void {
     title: 'Editar movimiento',
     size: 'md',
     body: `<form id="tx-edit" class="form-grid" autocomplete="off">
-      ${field({ label: 'Monto', name: 'amount', type: 'number', value: tx.amount, min: '0.01', suffix: currency(), required: true })}
+      ${field({ label: 'Monto', name: 'amount', type: 'number', value: tx.amount, min: currencyMin(), step: currencyStep(), suffix: currency(), required: true })}
       ${field({ label: 'Fecha', name: 'date', type: 'date', value: tx.date, required: true })}
       ${field({ label: 'Categoría', name: 'category', value: tx.category })}
       ${field({ label: 'Cuenta', name: 'accountId', value: tx.accountId, options: accountOptions(tx.accountId) })}
@@ -170,7 +170,7 @@ export function openAccountForm({ accountId = null }: { accountId?: string | nul
           { value: 'other', label: 'Otra' },
         ],
       })}
-      ${field({ label: 'Saldo inicial', name: 'openingBalance', type: 'number', value: account?.openingBalance ?? 0, step: '0.01', suffix: currency() })}
+      ${field({ label: 'Saldo inicial', name: 'openingBalance', type: 'number', value: account?.openingBalance ?? 0, step: currencyStep(), suffix: currency() })}
       ${field({ label: 'Color de referencia', name: 'color', type: 'color', value: account?.color || '#4f6ef7', className: 'span-2' })}
     </form>`,
     footer: `<button class="btn btn-ghost" type="button" data-close>Cancelar</button>
