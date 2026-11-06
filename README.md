@@ -182,6 +182,12 @@ La compilación usa tres configuraciones:
 
 El proyecto se empaqueta con `electron-builder`. La configuración vive en `electron-builder.yml` y el icono en `build/icon.ico`.
 
+El canal oficial de releases es público:
+
+**https://github.com/MikanproJK/Proyecto-predeterminado/releases**
+
+La versión 1.0.0 ya está publicada allí con el instalador, `latest.yml` y el blockmap.
+
 ### Crear el instalador
 
 ```bash
@@ -218,7 +224,7 @@ La aplicación usa `electron-updater` con GitHub Releases:
 
 Requisitos:
 
-1. El repositorio configurado en `electron-builder.yml` (`MikanproJK/Proyecto-predeterminado`) debe ser **público**. `electron-updater` consulta `latest.yml` sin credenciales; si el repositorio es privado, la comprobación devuelve 404. Para repositorios privados habría que distribuir un token de lectura dentro de la aplicación, lo que no se recomienda.
+1. El repositorio `MikanproJK/Proyecto-predeterminado` es **público**. `electron-updater` consulta `latest.yml` sin credenciales; si el repositorio fuera privado, la comprobación devolvería 404.
 2. Un token de GitHub con permiso sobre el repositorio, expuesto como `GH_TOKEN`.
 
 Pasos:
@@ -227,10 +233,13 @@ Pasos:
 # 1. Subir la versión (crea commit y etiqueta)
 npm version patch
 
-# 2. Configurar el token en la sesión de PowerShell
+# 2. Publicar el commit y el tag en GitHub
+git push origin master --follow-tags
+
+# 3. Configurar el token en la sesión de PowerShell
 $env:GH_TOKEN = "ghp_..."
 
-# 3. Compilar, probar y publicar
+# 4. Compilar, probar y publicar
 npm run release
 ```
 
@@ -238,10 +247,14 @@ Si prefieres controlar el commit manualmente:
 
 ```bash
 npm version patch --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "Version 1.0.1"
+git tag -a v1.0.1 -m "Version 1.0.1"
+git push origin master --follow-tags
 npm run release
 ```
 
-`npm run release` crea la release en GitHub y sube el instalador, `latest.yml` y el `.blockmap`. La versión publicada debe ser mayor que la instalada (por ejemplo, `1.0.1` sobre `1.0.0`) para que la actualización aparezca.
+`npm run release` crea la release en GitHub y sube el instalador, `latest.yml` y el `.blockmap`. La versión publicada debe ser mayor que la instalada (por ejemplo, `1.0.1` sobre `1.0.0`) para que la actualización aparezca. Sube siempre el tag antes de publicar: la release queda asociada a ese commit y la app lo usa como referencia de versión.
 
 > Los instaladores sin firma de código pueden mostrar una advertencia de SmartScreen. Para distribución pública se recomienda configurar un certificado de firma en `electron-builder.yml`.
 
