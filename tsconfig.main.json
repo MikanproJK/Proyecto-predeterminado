@@ -8,5 +8,5 @@
     "rootDir": ".",
     "outDir": "dist/main"
   },
-  "include": ["main.ts", "preload.ts", "src/types.ts"]
+  "include": ["main.ts", "preload.ts", "updater.ts", "src/types.ts"]
 }

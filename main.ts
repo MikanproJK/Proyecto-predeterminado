@@ -10,6 +10,7 @@ import type {
   SaveTextPayload,
   Settings,
 } from './src/types.js' with { 'resolution-mode': 'import' };
+import { initUpdater, registerUpdateIpc, scheduleUpdateChecks } from './updater.js';
 
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
 const IS_DEV = process.argv.includes('--dev');
@@ -278,7 +279,10 @@ if (!gotLock) {
     Menu.setApplicationMenu(null);
     registerProtocol();
     registerIpc();
+    registerUpdateIpc();
+    initUpdater();
     await createWindow();
+    scheduleUpdateChecks();
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });

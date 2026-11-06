@@ -22,6 +22,7 @@ Aplicación de escritorio para administrar una cartera de préstamos, los client
 - **Monedas reales**: cada moneda usa su propio símbolo y cantidad de decimales. USD (`US$`) y CLP (`$`, sin decimales) están priorizados; también se admiten EUR, MXN, COP, ARS, PEN, UYU, BOB, PYG, BRL, DOP, GTQ, HNL, NIO, CRC, PAB, VES, CAD, GBP, AUD, CHF, JPY, CNY, INR, RUB y ZAR. La moneda es global para toda la aplicación y los importes guardados no se convierten al cambiarla.
 - **Búsqueda global** y paleta de comandos con `Ctrl+K`.
 - **Documentos**: contrato de préstamo y recibo de pago listos para imprimir o guardar como PDF.
+- **Actualizaciones**: la versión instalada comprueba si hay versiones nuevas al iniciar y cada seis horas. Desde **Configuración → Actualizaciones** puedes buscar, descargar y reiniciar para instalar sin perder tus datos.
 
 ## Requisitos
 
@@ -52,6 +53,11 @@ La ventana principal usa un protocolo interno `app://bundle/` y no necesita serv
 | `npm run build` | Limpia `dist/`, compila main/renderer y copia los recursos. |
 | `npm run typecheck` | Verifica los tipos de main, renderer y pruebas sin emitir archivos. |
 | `npm test` | Ejecuta la suite del motor financiero con `tsx`. |
+| `npm run package` | Compila y genera el instalador oficial de Windows en `release/`. |
+| `npm run dist` | Verifica tipos, ejecuta las pruebas y genera el instalador. |
+| `npm run dist:dir` | Genera solo la carpeta desempaquetada, sin instalador. |
+| `npm run release` | Compila, prueba y publica el instalador en GitHub Releases. |
+| `npm run icon` | Regenera `build/icon.png` y `build/icon.ico`. |
 
 Para abrir las herramientas de desarrollo:
 
@@ -104,6 +110,8 @@ El archivo se escribe de forma atómica (archivo temporal + reemplazo) y la inte
 ```
 main.ts                Proceso principal de Electron, protocolo app://, IPC y persistencia
 preload.ts             Puente seguro entre el renderer y Electron
+updater.ts             Comprobación, descarga e instalación de actualizaciones
+electron-builder.yml   Empaquetado NSIS y publicación en GitHub Releases
 src/
   index.html           Shell de la aplicación
   styles.css           Sistema visual, temas y estilos de todos los componentes
@@ -142,15 +150,20 @@ tests/
   finance.test.ts      Pruebas del motor financiero
 scripts/
   clean.mjs            Limpia dist/
-  copy-assets.mjs      Copia HTML, CSS e imágenes al renderer compilado
+  copy-assets.mjs      Copia HTML, CSS y package.json al renderer compilado
+  make-icon.mjs        Genera el icono PNG/ICO de la aplicación
+build/
+  icon.ico             Icono del instalador y de la ventana
+  icon.png             Icono en alta resolución
 dist/                  Salida de compilación (generada, no versionada)
+release/               Instaladores y metadatos de actualización (generados, no versionados)
 ```
 
 La interfaz está separada por responsabilidades: `app.ts` solo arranca y conecta módulos; `lib/router.ts` conserva la ruta activa; `lib/view-host.ts` decide qué vista renderizar; y cada acción de negocio vive en su archivo dentro de `src/actions/`. `src/actions.ts` mantiene las exportaciones anteriores para que las vistas no dependan de la ubicación interna de cada acción.
 
 La compilación usa tres configuraciones:
 
-- `tsconfig.main.json` — `main.ts` y `preload.ts` en CommonJS/Node16 hacia `dist/main`.
+- `tsconfig.main.json` — `main.ts`, `preload.ts` y `updater.ts` en CommonJS/Node16 hacia `dist/main`.
 - `tsconfig.renderer.json` — `src/**/*.ts` en ESM hacia `dist/renderer`.
 - `tsconfig.test.json` — verificación de tipos de las pruebas.
 
@@ -167,13 +180,69 @@ La compilación usa tres configuraciones:
 
 ## Distribución
 
-El proyecto se ejecuta directamente con Electron. Para generar un instalador se puede integrar `electron-builder` o `electron-forge`; la aplicación ya incluye `productName`, versión y punto de entrada en `package.json`.
+El proyecto se empaqueta con `electron-builder`. La configuración vive en `electron-builder.yml` y el icono en `build/icon.ico`.
 
-Ejemplo con `electron-builder`:
+### Crear el instalador
 
 ```bash
-npm install --save-dev electron-builder
-npx electron-builder --win
+npm run dist
 ```
 
-Para otras plataformas, cambia `--win` por `--mac` o `--linux`. Antes de distribuir, revisa el nombre del producto, el icono y la configuración de firma de código.
+El comando verifica los tipos, ejecuta las pruebas y genera:
+
+| Archivo | Descripción |
+| --- | --- |
+| `release/Prestamos-Pro-1.0.0-x64-setup.exe` | Instalador NSIS para Windows x64. |
+| `release/latest.yml` | Metadatos que consulta el actualizador. |
+| `release/Prestamos-Pro-1.0.0-x64-setup.exe.blockmap` | Descarga diferencial de actualizaciones. |
+
+El instalador es por usuario (no requiere administrador), permite elegir la carpeta de instalación y crea accesos directos en el escritorio y el menú Inicio. Los datos se guardan en `%APPDATA%\Préstamos Pro` y se conservan al actualizar o desinstalar.
+
+Para probar el empaquetado sin generar el instalador:
+
+```bash
+npm run dist:dir
+```
+
+### Actualizaciones automáticas
+
+La aplicación usa `electron-updater` con GitHub Releases:
+
+- Al iniciar (unos segundos después) y cada seis horas comprueba si hay una versión nueva.
+- En **Configuración → Actualizaciones** puedes buscar manualmente, ver las notas de la versión, descargar y reiniciar para instalar.
+- La descarga y la instalación siempre requieren tu confirmación.
+- Los datos, temas y preferencias no se modifican durante la actualización.
+- La búsqueda de actualizaciones solo funciona en la versión instalada; `npm start` y la carpeta `win-unpacked` muestran el aviso correspondiente.
+
+### Publicar una versión
+
+Requisitos:
+
+1. El repositorio configurado en `electron-builder.yml` (`MikanproJK/Proyecto-predeterminado`) debe ser **público**. `electron-updater` consulta `latest.yml` sin credenciales; si el repositorio es privado, la comprobación devuelve 404. Para repositorios privados habría que distribuir un token de lectura dentro de la aplicación, lo que no se recomienda.
+2. Un token de GitHub con permiso sobre el repositorio, expuesto como `GH_TOKEN`.
+
+Pasos:
+
+```bash
+# 1. Subir la versión (crea commit y etiqueta)
+npm version patch
+
+# 2. Configurar el token en la sesión de PowerShell
+$env:GH_TOKEN = "ghp_..."
+
+# 3. Compilar, probar y publicar
+npm run release
+```
+
+Si prefieres controlar el commit manualmente:
+
+```bash
+npm version patch --no-git-tag-version
+npm run release
+```
+
+`npm run release` crea la release en GitHub y sube el instalador, `latest.yml` y el `.blockmap`. La versión publicada debe ser mayor que la instalada (por ejemplo, `1.0.1` sobre `1.0.0`) para que la actualización aparezca.
+
+> Los instaladores sin firma de código pueden mostrar una advertencia de SmartScreen. Para distribución pública se recomienda configurar un certificado de firma en `electron-builder.yml`.
+
+Para otras plataformas, añade los objetivos correspondientes en `electron-builder.yml` y ejecuta `electron-builder --mac` o `electron-builder --linux`.

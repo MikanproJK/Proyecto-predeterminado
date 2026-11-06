@@ -15,7 +15,7 @@ import {
 import { THEMES, DENSITIES, LOCALES, themeMeta } from '../lib/themes.js';
 import { CURRENCY_OPTIONS, currencyLabel, currencyMeta } from '../lib/currencies.js';
 import * as actions from '../actions.js';
-import type { Density, Settings, SettingsPatch, ThemeId, ViewContext } from '../types.js';
+import type { Density, Settings, SettingsPatch, ThemeId, UpdateStatus, ViewContext } from '../types.js';
 
 function appearanceCard(settings: Settings) {
   return `<section class="card">
@@ -205,7 +205,7 @@ function aboutCard(settings: Settings) {
         <h3 class="card-title">Acerca de Préstamos Pro</h3>
         <span class="card-sub">Aplicación de escritorio para gestión de créditos</span>
       </div>
-      ${badge('v1.0.0', 'muted')}
+      ${badge('v1.0.0', 'muted', { className: 'about-version-badge' })}
     </div>
     <div class="card-body">
       <div class="about-list">
@@ -224,6 +224,59 @@ function aboutCard(settings: Settings) {
       </div>
     </div>
   </section>`;
+}
+
+function updateCard() {
+  return `<section class="card" id="update-card">
+    <div class="card-head">
+      <div class="card-heading">
+        <h3 class="card-title">Actualizaciones</h3>
+        <span class="card-sub">Descarga las mejoras publicadas en GitHub Releases</span>
+      </div>
+      <span class="badge badge--muted" data-update="badge">Consultando</span>
+    </div>
+    <div class="card-body">
+      <div class="about-list">
+        <div class="about-row"><span>Versión instalada</span><strong data-update="current">—</strong></div>
+        <div class="about-row"><span>Estado</span><strong data-update="status">Consultando…</strong></div>
+        <div class="about-row" data-update-row="latest" hidden><span>Nueva versión</span><strong data-update="latest">—</strong></div>
+        <div class="about-row" data-update-row="checked" hidden><span>Última comprobación</span><strong data-update="checked">—</strong></div>
+      </div>
+
+      <div class="update-progress" data-update="progress-wrap" hidden>
+        <div class="progress"><span class="progress-fill" data-update="progress-bar" style="width:0%"></span></div>
+        <span class="update-progress-label" data-update="progress-label">0%</span>
+      </div>
+
+      <div class="form-note form-note--info mt-2" data-update="notes-wrap" hidden>
+        ${icon('sparkles', 16)}
+        <div class="update-notes" data-update="notes"></div>
+      </div>
+
+      <div class="settings-actions">
+        <button class="btn btn-primary btn-sm" type="button" data-update-action="check">${icon('refresh', 15)} Buscar actualizaciones</button>
+        <button class="btn btn-primary btn-sm" type="button" data-update-action="download" hidden>${icon('download', 15)} Descargar actualización</button>
+        <button class="btn btn-primary btn-sm" type="button" data-update-action="install" hidden>${icon('check', 15)} Reiniciar e instalar</button>
+      </div>
+
+      <div class="form-note mt-2">
+        ${icon('shield', 16)}
+        <div>La aplicación comprueba si hay versiones nuevas al iniciar y cada seis horas. La descarga y la instalación solo ocurren cuando tú lo confirmas, y tus datos no se modifican.</div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(unit === 0 || value >= 10 ? 0 : 1)} ${units[unit]}`;
 }
 
 function tipsCard() {
@@ -253,7 +306,11 @@ function tipsCard() {
   </section>`;
 }
 
+let detachUpdateStatus: (() => void) | null = null;
+
 export function render(root: HTMLElement, _ctx: ViewContext): void {
+  detachUpdateStatus?.();
+  detachUpdateStatus = null;
   const settings = state.db.settings;
 
   root.innerHTML = `<div class="page">
@@ -267,6 +324,7 @@ export function render(root: HTMLElement, _ctx: ViewContext): void {
       <div class="stack" style="gap:16px">
         ${shortcutsCard()}
         ${aboutCard(settings)}
+        ${updateCard()}
         ${tipsCard()}
       </div>
     </div>
@@ -355,6 +413,147 @@ export function render(root: HTMLElement, _ctx: ViewContext): void {
     });
   });
 
+  /* Actualizaciones */
+  const updateSection = root.querySelector<HTMLElement>('#update-card');
+  if (updateSection) {
+    const updateEl = <T extends HTMLElement>(selector: string) => updateSection.querySelector<T>(selector);
+    const setUpdateText = (selector: string, value: string) => {
+      const el = updateEl<HTMLElement>(selector);
+      if (el) el.textContent = value;
+    };
+    const setUpdateHidden = (selector: string, hidden: boolean) => {
+      const el = updateEl<HTMLElement>(selector);
+      if (el) el.hidden = hidden;
+    };
+
+    const badgeEl = updateEl<HTMLElement>('[data-update="badge"]');
+    const progressWrap = updateEl<HTMLElement>('[data-update="progress-wrap"]');
+    const progressBar = updateEl<HTMLElement>('[data-update="progress-bar"]');
+    const notesWrap = updateEl<HTMLElement>('[data-update="notes-wrap"]');
+    const checkBtn = updateEl<HTMLButtonElement>('[data-update-action="check"]');
+    const downloadBtn = updateEl<HTMLButtonElement>('[data-update-action="download"]');
+    const installBtn = updateEl<HTMLButtonElement>('[data-update-action="install"]');
+
+    const toneFor = (phase: UpdateStatus['phase']): string => {
+      if (phase === 'available') return 'primary';
+      if (phase === 'downloading') return 'warning';
+      if (phase === 'downloaded' || phase === 'up-to-date') return 'success';
+      if (phase === 'error') return 'danger';
+      if (phase === 'unsupported') return 'muted';
+      return 'info';
+    };
+
+    const labelFor = (phase: UpdateStatus['phase']): string => {
+      const labels: Record<UpdateStatus['phase'], string> = {
+        idle: 'Listo',
+        checking: 'Buscando',
+        available: 'Disponible',
+        downloading: 'Descargando',
+        downloaded: 'Lista',
+        'up-to-date': 'Al día',
+        error: 'Error',
+        unsupported: 'No disponible',
+      };
+      return labels[phase] || 'Listo';
+    };
+
+    const paintUpdate = (status: UpdateStatus) => {
+      const version = status.currentVersion ? `v${status.currentVersion}` : '—';
+      setUpdateText('[data-update="current"]', version);
+      setUpdateText('[data-update="status"]', status.message || 'Sin novedades.');
+      if (badgeEl) {
+        badgeEl.className = `badge badge--${toneFor(status.phase)}`;
+        badgeEl.textContent = labelFor(status.phase);
+      }
+
+      const showLatest =
+        Boolean(status.version) &&
+        ['available', 'downloading', 'downloaded'].includes(status.phase);
+      setUpdateHidden('[data-update-row="latest"]', !showLatest);
+      if (showLatest) setUpdateText('[data-update="latest"]', `v${status.version}`);
+
+      const checked = status.checkedAt ? new Date(status.checkedAt) : null;
+      const hasChecked = Boolean(checked && !Number.isNaN(checked.getTime()));
+      setUpdateHidden('[data-update-row="checked"]', !hasChecked);
+      if (hasChecked && checked) {
+        setUpdateText(
+          '[data-update="checked"]',
+          checked.toLocaleString(settings.locale || 'es-419', { dateStyle: 'short', timeStyle: 'short' }),
+        );
+      }
+
+      const showProgress = status.phase === 'downloading' || status.phase === 'downloaded';
+      if (progressWrap) progressWrap.hidden = !showProgress;
+      const percent = status.phase === 'downloaded' ? 100 : Math.max(0, Math.min(100, status.progress));
+      if (progressBar) progressBar.style.width = `${percent}%`;
+      const transferred = formatBytes(status.transferred);
+      const total = formatBytes(status.total);
+      const detail = transferred && total ? ` · ${transferred} de ${total}` : '';
+      setUpdateText('[data-update="progress-label"]', `${percent}%${detail}`);
+
+      const notes = status.releaseNotes.trim();
+      const showNotes =
+        Boolean(notes) && ['available', 'downloading', 'downloaded'].includes(status.phase);
+      if (notesWrap) notesWrap.hidden = !showNotes;
+      if (showNotes) setUpdateText('[data-update="notes"]', notes);
+
+      if (checkBtn) checkBtn.disabled = !status.canCheck;
+      if (downloadBtn) downloadBtn.hidden = !status.canDownload;
+      if (installBtn) installBtn.hidden = !status.canInstall;
+    };
+
+    checkBtn?.addEventListener('click', async () => {
+      checkBtn.disabled = true;
+      try {
+        const status = await window.api.checkForUpdates();
+        paintUpdate(status);
+        if (status.phase === 'up-to-date') toast('Ya tienes la última versión.', 'success');
+        else if (status.phase === 'available') toast(`Nueva versión ${status.version} disponible.`, 'info');
+        else if (status.phase === 'unsupported') toast(status.message, 'info');
+        else if (status.phase === 'error') toast(status.message, 'error');
+      } catch (err) {
+        toast(err.message || 'No se pudo buscar actualizaciones.', 'error');
+      }
+    });
+
+    downloadBtn?.addEventListener('click', async () => {
+      downloadBtn.disabled = true;
+      try {
+        const status = await window.api.downloadUpdate();
+        paintUpdate(status);
+        if (status.phase === 'error') toast(status.message, 'error');
+      } catch (err) {
+        toast(err.message || 'No se pudo descargar la actualización.', 'error');
+      } finally {
+        downloadBtn.disabled = false;
+      }
+    });
+
+    installBtn?.addEventListener('click', async () => {
+      const ok = await confirmDialog({
+        title: 'Instalar actualización',
+        message:
+          'La aplicación se cerrará para instalar la nueva versión y volverá a abrir. Tus datos se conservan.',
+        confirmLabel: 'Reiniciar e instalar',
+        tone: 'primary',
+      });
+      if (!ok) return;
+      try {
+        const started = await window.api.installUpdate();
+        if (!started) toast('La actualización todavía no está lista.', 'warning');
+      } catch (err) {
+        toast(err.message || 'No se pudo instalar la actualización.', 'error');
+      }
+    });
+
+    if (window.api?.onUpdateStatus) {
+      detachUpdateStatus = window.api.onUpdateStatus((status) => paintUpdate(status));
+    }
+    window.api?.updateStatus?.()
+      .then((status) => paintUpdate(status))
+      .catch(() => setUpdateText('[data-update="status"]', 'No se pudo consultar el estado.'));
+  }
+
   /* Información del sistema */
   window.api?.info?.()
     .then((info) => {
@@ -363,6 +562,8 @@ export function render(root: HTMLElement, _ctx: ViewContext): void {
       if (pathEl) pathEl.textContent = info.dataFile || '-';
       const versionEl = document.querySelector<HTMLElement>('[data-about="version"]')!;
       if (versionEl) versionEl.textContent = info.version || '—';
+      const badgeEl = document.querySelector<HTMLElement>('.about-version-badge');
+      if (badgeEl && info.version) badgeEl.textContent = `v${info.version}`;
       const electronEl = document.querySelector<HTMLElement>('[data-about="electron"]')!;
       if (electronEl) electronEl.textContent = info.electron || '—';
       const platformEl = document.querySelector<HTMLElement>('[data-about="platform"]')!;

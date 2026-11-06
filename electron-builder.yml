@@ -1,0 +1,50 @@
+# Configuración de empaquetado y publicación de Préstamos Pro.
+# Documentación: https://www.electron.build/configuration
+
+appId: com.mikanprojk.prestamospro
+productName: Préstamos Pro
+copyright: Copyright © 2026 Préstamos Pro
+
+directories:
+  output: release
+  buildResources: build
+
+# Solo se empaqueta la aplicación compilada y sus dependencias de producción.
+files:
+  - dist/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
+
+asar: true
+npmRebuild: false
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "Prestamos-Pro-${version}-${arch}-setup.${ext}"
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Préstamos Pro
+  uninstallDisplayName: Préstamos Pro
+  # Los datos del usuario viven en %APPDATA%\Préstamos Pro y no se tocan al desinstalar.
+  deleteAppDataOnUninstall: false
+  differentialPackage: true
+
+# Actualizaciones automáticas desde GitHub Releases.
+# El repositorio debe ser público para que electron-updater pueda consultar latest.yml.
+publish:
+  provider: github
+  owner: MikanproJK
+  repo: Proyecto-predeterminado
+  releaseType: release

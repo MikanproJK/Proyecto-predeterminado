@@ -11,16 +11,25 @@
   },
   "scripts": {
     "clean": "node scripts/clean.mjs",
+    "icon": "node scripts/make-icon.mjs",
     "build": "npm run clean && tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.test.json",
     "start": "npm run build && electron .",
     "dev": "npm run build && electron . --dev",
-    "test": "tsx tests/finance.test.ts"
+    "test": "tsx tests/finance.test.ts",
+    "package": "npm run build && electron-builder --win nsis",
+    "dist": "npm run typecheck && npm test && npm run package",
+    "dist:dir": "npm run build && electron-builder --win --dir",
+    "release": "npm run typecheck && npm test && npm run build && electron-builder --win nsis --publish always"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

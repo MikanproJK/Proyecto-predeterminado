@@ -4502,6 +4502,35 @@ html.has-modal {
   word-break: break-word;
 }
 
+/* ---------- actualizaciones ---------- */
+
+.update-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.update-progress .progress {
+  flex: 1;
+}
+
+.update-progress-label {
+  font-size: 0.72rem;
+  font-weight: 620;
+  color: var(--text-soft);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.update-notes {
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
 /* ---------- reportes ---------- */
 
 .report-toolbar {

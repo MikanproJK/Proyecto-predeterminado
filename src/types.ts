@@ -467,6 +467,33 @@ export interface SaveTextPayload {
   filters?: Array<{ name: string; extensions: string[] }>;
 }
 
+export type UpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'up-to-date'
+  | 'error'
+  | 'unsupported';
+
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  currentVersion: string;
+  version: string | null;
+  releaseNotes: string;
+  releaseDate: string | null;
+  progress: number;
+  bytesPerSecond: number;
+  transferred: number;
+  total: number;
+  message: string;
+  canCheck: boolean;
+  canDownload: boolean;
+  canInstall: boolean;
+  checkedAt: string | null;
+}
+
 export interface SaveDatabaseResult {
   ok: true;
   updatedAt: string;
@@ -494,6 +521,11 @@ export interface ElectronApi {
   setOverlay(colors: OverlayColors): Promise<boolean>;
   info(): Promise<AppInfo>;
   relaunch(): Promise<void>;
+  updateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<UpdateStatus>;
+  downloadUpdate(): Promise<UpdateStatus>;
+  installUpdate(): Promise<boolean>;
+  onUpdateStatus(listener: (status: UpdateStatus) => void): () => void;
 }
 
 /* ---------- renderer ---------- */

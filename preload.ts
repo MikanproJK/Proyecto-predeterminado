@@ -1,5 +1,11 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import type { Database, ElectronApi, OverlayColors, SaveTextPayload } from './src/types.js' with { 'resolution-mode': 'import' };
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import type {
+  Database,
+  ElectronApi,
+  OverlayColors,
+  SaveTextPayload,
+  UpdateStatus,
+} from './src/types.js' with { 'resolution-mode': 'import' };
 
 const api: ElectronApi = {
   load: () => ipcRenderer.invoke('db:load'),
@@ -12,6 +18,15 @@ const api: ElectronApi = {
   setOverlay: (colors: OverlayColors) => ipcRenderer.invoke('window:overlay', colors),
   info: () => ipcRenderer.invoke('app:info'),
   relaunch: () => ipcRenderer.invoke('app:relaunch'),
+  updateStatus: () => ipcRenderer.invoke('update:status'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  downloadUpdate: () => ipcRenderer.invoke('update:download'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateStatus: (listener: (status: UpdateStatus) => void) => {
+    const handler = (_event: IpcRendererEvent, status: UpdateStatus) => listener(status);
+    ipcRenderer.on('update:status', handler);
+    return () => ipcRenderer.removeListener('update:status', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('api', api);
