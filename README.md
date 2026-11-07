@@ -6,13 +6,13 @@ Aplicación de escritorio para administrar una cartera de préstamos, los client
 
 - **Panel general** con cartera, capital, cobros del mes, mora, vencimientos, composición de la deuda, actividad reciente y clientes en atraso.
 - **Clientes** regulares y temporales, con contacto, documento, vigencia, notas, estado activo/inactivo y ficha completa con historial de préstamos y pagos.
-- **Préstamos** con monto, tasa, base de tasa, frecuencia, número de cuotas, cargo inicial, mora, días de gracia, garantía, notas y cuenta de desembolso.
+- **Préstamos** con monto, tasa o interés fijo, base de tasa, frecuencia, número de cuotas, cargo inicial, mora, días de gracia, garantía, notas y cuenta de desembolso.
 - **Motor financiero** con cuatro sistemas de amortización:
   - Cuota fija (sistema francés).
   - Abono fijo a capital (capital constante, cuota decreciente).
   - Interés global (interés plano por período).
   - Solo interés / pago único al final (bullet).
-- **Tasas** mensuales, anuales o por período, y frecuencias diaria, semanal, quincenal, mensual o personalizada.
+- **Interés** por porcentaje (mensual, anual o por período) o en monto fijo: total del préstamo, por cuota o por período, y frecuencias diaria, semanal, quincenal, mensual o personalizada.
 - **Mora** fija diaria, porcentaje diario sobre saldo, porcentaje diario sobre cuota, porcentaje único o monto único, con días de gracia.
 - **Pagos** aplicados en orden cronológico: mora → cargos → interés → capital. El excedente queda a favor del cliente.
 - **Cobros** con recibos imprimibles, edición, eliminación y creación automática del ingreso en caja.
@@ -71,7 +71,7 @@ npm run dev
 npm test
 ```
 
-La suite (`tests/finance.test.ts`) valida el motor financiero: utilidades numéricas y de fechas, conversión de tasas, los cuatro sistemas de amortización, aplicación de pagos, mora, días de gracia, agregados de cartera, series mensuales y exportación CSV. Se ejecuta directamente sobre el TypeScript con `tsx`.
+La suite (`tests/finance.test.ts`) valida el motor financiero: utilidades numéricas y de fechas, conversión de tasas, interés fijo en sus tres modalidades, los cuatro sistemas de amortización, aplicación de pagos, mora, días de gracia, agregados de cartera, series mensuales y exportación CSV. Se ejecuta directamente sobre el TypeScript con `tsx`.
 
 ## Datos y respaldo
 
@@ -186,7 +186,7 @@ El canal oficial de releases es público:
 
 **https://github.com/MikanproJK/Proyecto-predeterminado/releases**
 
-La versión 1.0.0 ya está publicada allí con el instalador, `latest.yml` y el blockmap.
+La versión 1.1.0 ya está publicada allí con el instalador, `latest.yml` y el blockmap.
 
 ### Crear el instalador
 
@@ -198,9 +198,9 @@ El comando verifica los tipos, ejecuta las pruebas y genera:
 
 | Archivo | Descripción |
 | --- | --- |
-| `release/Prestamos-Pro-1.0.0-x64-setup.exe` | Instalador NSIS para Windows x64. |
+| `release/Prestamos-Pro-1.1.0-x64-setup.exe` | Instalador NSIS para Windows x64. |
 | `release/latest.yml` | Metadatos que consulta el actualizador. |
-| `release/Prestamos-Pro-1.0.0-x64-setup.exe.blockmap` | Descarga diferencial de actualizaciones. |
+| `release/Prestamos-Pro-1.1.0-x64-setup.exe.blockmap` | Descarga diferencial de actualizaciones. |
 
 El instalador es por usuario (no requiere administrador), permite elegir la carpeta de instalación y crea accesos directos en el escritorio y el menú Inicio. Los datos se guardan en `%APPDATA%\Préstamos Pro` y se conservan al actualizar o desinstalar.
 
@@ -248,13 +248,13 @@ Si prefieres controlar el commit manualmente:
 ```bash
 npm version patch --no-git-tag-version
 git add package.json package-lock.json
-git commit -m "Version 1.0.1"
-git tag -a v1.0.1 -m "Version 1.0.1"
+git commit -m "Version 1.1.1"
+git tag -a v1.1.1 -m "Version 1.1.1"
 git push origin master --follow-tags
 npm run release
 ```
 
-`npm run release` crea la release en GitHub y sube el instalador, `latest.yml` y el `.blockmap`. La versión publicada debe ser mayor que la instalada (por ejemplo, `1.0.1` sobre `1.0.0`) para que la actualización aparezca. Sube siempre el tag antes de publicar: la release queda asociada a ese commit y la app lo usa como referencia de versión.
+`npm run release` crea la release en GitHub y sube el instalador, `latest.yml` y el `.blockmap`. La versión publicada debe ser mayor que la instalada (por ejemplo, `1.1.1` sobre `1.1.0`) para que la actualización aparezca. Sube siempre el tag antes de publicar: la release queda asociada a ese commit y la app lo usa como referencia de versión.
 
 > Los instaladores sin firma de código pueden mostrar una advertencia de SmartScreen. Para distribución pública se recomienda configurar un certificado de firma en `electron-builder.yml`.
 

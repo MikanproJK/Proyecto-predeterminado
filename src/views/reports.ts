@@ -22,6 +22,7 @@ import {
   transactionsSummary,
   computeLoan,
   loanStateMeta,
+  interestSummary,
 } from '../finance.js';
 import {
   icon,
@@ -515,7 +516,7 @@ function profitabilityTab(data: ReportData): string {
             ${data.loanRows.map((loan) => {
               const stateMeta = loanStateMeta(loan.state);
               return `<tr class="is-clickable" data-loan="${loan.id}">
-                <td><div class="cell-stack"><strong>${esc(loan.code)}</strong><span>${loan.installments} cuotas · ${num(loan.interestRate)}%</span></div></td>
+                <td><div class="cell-stack"><strong>${esc(loan.code)}</strong><span>${loan.installments} cuotas · ${esc(interestSummary(loan))}</span></div></td>
                 <td>${esc(getClient(loan.clientId)?.name || '—')}</td>
                 <td class="num money">${money(loan.totals.principal)}</td>
                 <td class="num money">${money(loan.totals.interest)}</td>

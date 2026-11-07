@@ -25,7 +25,7 @@ export function showWelcome(): void {
     <div class="welcome-grid">
       <div class="welcome-item">
         <span>${icon('credit-card', 18)}</span>
-        <div><strong>Préstamos a tu medida</strong><p>Interés mensual, anual o por cuota; cuota fija, interés global o solo interés.</p></div>
+        <div><strong>Préstamos a tu medida</strong><p>Interés por porcentaje o monto fijo; cuota fija, interés global o solo interés.</p></div>
       </div>
       <div class="welcome-item">
         <span>${icon('users', 18)}</span>

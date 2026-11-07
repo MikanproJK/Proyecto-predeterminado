@@ -156,7 +156,7 @@ export function render(root: HTMLElement, ctx: ViewContext): void {
             </div>
           </div>
           <div class="quick-grid" style="max-width:660px;margin:6px auto 0">
-            <div class="quick-action" style="cursor:default">${icon('percent', 18)}<span>Interés mensual, anual o por cuota</span></div>
+            <div class="quick-action" style="cursor:default">${icon('percent', 18)}<span>Interés por porcentaje o monto fijo</span></div>
             <div class="quick-action" style="cursor:default">${icon('sliders', 18)}<span>Cuota fija, abono fijo, global o solo interés</span></div>
             <div class="quick-action" style="cursor:default">${icon('alert', 18)}<span>Mora automática por días de atraso</span></div>
             <div class="quick-action" style="cursor:default">${icon('wallet', 18)}<span>Caja, bancos y billeteras integradas</span></div>

@@ -310,6 +310,8 @@ export function demoDatabase(defaults?: Database): Database {
       principal: spec.principal,
       interestRate: spec.interestRate,
       rateType: spec.rateType,
+      interestMode: 'percent',
+      fixedInterest: 0,
       amortization: spec.amortization,
       frequency: spec.frequency,
       customDays: 15,

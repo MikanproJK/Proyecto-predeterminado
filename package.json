@@ -1,7 +1,7 @@
 {
   "name": "prestamos-pro",
   "productName": "Préstamos Pro",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Suite de escritorio para administrar préstamos, clientes y finanzas",
   "main": "dist/main/main.js",
   "author": "Préstamos Pro",

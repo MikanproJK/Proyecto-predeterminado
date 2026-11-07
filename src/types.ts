@@ -14,6 +14,7 @@ export type ClientType = 'regular' | 'temporary';
 export type LoanStatus = 'active' | 'cancelled' | 'draft';
 export type LoanState = 'active' | 'overdue' | 'paid' | 'cancelled' | 'draft';
 export type RateType = 'monthly' | 'annual' | 'period';
+export type InterestMode = 'percent' | 'fixed_total' | 'fixed_installment' | 'fixed_period';
 export type Amortization = 'fixed' | 'declining' | 'flat' | 'bullet';
 export type Frequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
 export type LateFeeType =
@@ -68,6 +69,8 @@ export interface Loan {
   principal: number;
   interestRate: number;
   rateType: RateType;
+  interestMode: InterestMode;
+  fixedInterest: number;
   amortization: Amortization;
   frequency: Frequency;
   customDays: number;
@@ -99,6 +102,8 @@ export interface LoanTerms {
   principal: number;
   interestRate?: number;
   rateType?: RateType;
+  interestMode?: InterestMode;
+  fixedInterest?: number;
   amortization?: Amortization;
   frequency?: Frequency;
   customDays?: number;
@@ -361,6 +366,8 @@ export interface LoanInput {
   principal: number;
   interestRate?: number;
   rateType?: RateType | string;
+  interestMode?: InterestMode | string;
+  fixedInterest?: number;
   amortization?: Amortization | string;
   frequency?: Frequency | string;
   customDays?: number;

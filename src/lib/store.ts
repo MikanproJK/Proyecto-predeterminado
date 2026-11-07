@@ -109,6 +109,23 @@ class StoreRepository {
         (db as unknown as Record<string, unknown>)[key] = [];
       }
     }
+    // Compatibilidad con datos anteriores: los préstamos sin modalidad de
+    // interés conservan su tasa porcentual y no se altera ningún importe.
+    db.loans = db.loans.map((loan) => {
+      const mode =
+        loan.interestMode === 'fixed_total' ||
+        loan.interestMode === 'fixed_installment' ||
+        loan.interestMode === 'fixed_period'
+          ? loan.interestMode
+          : 'percent';
+      return {
+        ...loan,
+        interestMode: mode,
+        fixedInterest: round2(num(loan.fixedInterest)),
+        interestRate: num(loan.interestRate),
+        rateType: loan.rateType || 'monthly',
+      };
+    });
     if (!db.accounts.length) db.accounts = this.defaultAccounts();
     db.settings.currency = currencyMeta(db.settings.currency).code;
     if (!db.settings.locale) db.settings.locale = 'es-419';
@@ -355,13 +372,21 @@ export function addLoan(input: LoanInput): Loan {
   const installments = Math.max(1, Math.round(num(input.installments) || 1));
   const startDate = input.startDate || todayISO();
   const firstDueDate = input.firstDueDate || startDate;
+  const interestMode =
+    input.interestMode === 'fixed_total' ||
+    input.interestMode === 'fixed_installment' ||
+    input.interestMode === 'fixed_period'
+      ? input.interestMode
+      : 'percent';
   const loan: Loan = {
     id: uid('loan'),
     code: nextLoanCode(),
     clientId: clientRecord.id,
     principal,
-    interestRate: num(input.interestRate),
+    interestRate: interestMode === 'percent' ? num(input.interestRate) : 0,
     rateType: (input.rateType || 'monthly') as Loan['rateType'],
+    interestMode,
+    fixedInterest: interestMode === 'percent' ? 0 : Math.max(0, round2(num(input.fixedInterest))),
     amortization: (input.amortization || 'fixed') as Loan['amortization'],
     frequency: (input.frequency || 'monthly') as Loan['frequency'],
     customDays: Math.max(1, Math.round(num(input.customDays) || 15)),
@@ -420,6 +445,20 @@ export function updateLoan(id: string, patch: LoanPatch): Loan {
   if (next.principal !== undefined) target.principal = round2(num(next.principal));
   if (next.installments !== undefined) target.installments = Math.max(1, Math.round(num(next.installments)));
   if (next.graceDays !== undefined) target.graceDays = Math.max(0, Math.round(num(next.graceDays)));
+  const mode =
+    target.interestMode === 'fixed_total' ||
+    target.interestMode === 'fixed_installment' ||
+    target.interestMode === 'fixed_period'
+      ? target.interestMode
+      : 'percent';
+  target.interestMode = mode;
+  if (mode === 'percent') {
+    target.interestRate = num(target.interestRate);
+    target.fixedInterest = 0;
+  } else {
+    target.interestRate = 0;
+    target.fixedInterest = Math.max(0, round2(num(target.fixedInterest)));
+  }
   bump();
   return target;
 }
@@ -739,6 +778,8 @@ export function schedulePreview(input: LoanInput): ScheduleRow[] {
     principal: num(input.principal),
     interestRate: num(input.interestRate),
     rateType: input.rateType as Loan['rateType'],
+    interestMode: (input.interestMode || 'percent') as Loan['interestMode'],
+    fixedInterest: num(input.fixedInterest),
     amortization: input.amortization as Loan['amortization'],
     frequency: input.frequency as Loan['frequency'],
     customDays: input.customDays,

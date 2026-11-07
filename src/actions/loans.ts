@@ -1,10 +1,10 @@
 /* Acciones de préstamos */
 
 import { state, addLoan, updateLoan, deleteLoan, cancelLoan, reactivateLoan } from '../lib/store.js';
-import { money, num, computeLoan, formatDate, periodRate, FREQUENCIES, AMORTIZATIONS, RATE_TYPES, LATE_FEE_TYPES } from '../finance.js';
+import { money, num, computeLoan, formatDate, periodRate, FREQUENCIES, AMORTIZATIONS, RATE_TYPES, LATE_FEE_TYPES, INTEREST_MODES, interestModeMeta } from '../finance.js';
 import { openModal, confirmDialog, toast, field, switchField, readForm, esc, icon } from '../lib/ui.js';
 import { navigate } from '../lib/nav.js';
-import type { Amortization, Frequency, LoanInput, LoanPatch, LoanTerms, LoanView, RateType } from '../types.js';
+import type { Amortization, Frequency, InterestMode, LoanInput, LoanPatch, LoanTerms, LoanView, RateType } from '../types.js';
 import { T, currency, currencyMin, currencyStep, accountOptions, clientOptions, defaultFirstDue } from './shared.js';
 import { openClientForm } from './clients.js';
 
@@ -49,6 +49,8 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
     principal: existing?.principal ?? initial?.principal ?? 1000,
     interestRate: existing?.interestRate ?? initial?.interestRate ?? 5,
     rateType: existing?.rateType || 'monthly',
+    interestMode: (existing?.interestMode || initial?.interestMode || 'percent') as InterestMode,
+    fixedInterest: existing?.fixedInterest ?? initial?.fixedInterest ?? 0,
     amortization: existing?.amortization || 'fixed',
     frequency: existing?.frequency || 'monthly',
     customDays: existing?.customDays || 15,
@@ -71,6 +73,15 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
 
   const clientSelectOptions = clientOptions(draft.clientId);
   const feeOptions = LATE_FEE_TYPES.map((option) => ({ value: option.value, label: option.label }));
+
+  const interestTitle = (mode: InterestMode, rate: number, fixed: number, base: string): string => {
+    if (mode === 'percent') {
+      const baseLabel = RATE_TYPES.find((item) => item.value === base)?.label?.toLowerCase() || 'mensual';
+      return `${rate}% ${baseLabel}`;
+    }
+    const meta = interestModeMeta(mode);
+    return `${meta.short} · ${money(fixed)}`;
+  };
 
   const basicForm = `<form id="loan-form" autocomplete="off">
     <div class="form-section">
@@ -96,8 +107,21 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
     <div class="form-section">
       <div class="form-section-title">${icon('percent', 14)} Condiciones del crédito</div>
       <div class="form-grid form-grid--3">
-        ${field({ label: 'Tasa de interés', name: 'interestRate', type: 'number', value: draft.interestRate, min: '0', step: '0.01', suffix: '%', required: true })}
-        ${field({ label: 'Base de la tasa', name: 'rateType', value: draft.rateType, options: RATE_TYPES })}
+        <div class="field span-2">
+          <span class="field-label">Interés del crédito <em>*</em></span>
+          <button type="button" class="interest-picker" data-interest-open>
+            <span class="interest-picker-icon" data-interest-icon>${icon(draft.interestMode === 'percent' ? 'percent' : 'coins', 17)}</span>
+            <span class="interest-picker-copy">
+              <strong data-interest-title>${esc(interestTitle(draft.interestMode as InterestMode, draft.interestRate, draft.fixedInterest, draft.rateType))}</strong>
+              <small data-interest-sub>${esc(interestModeMeta(draft.interestMode).hint)}</small>
+            </span>
+            <span class="interest-picker-edit">${icon('sliders', 15)} Cambiar</span>
+          </button>
+          <input type="hidden" name="interestMode" value="${esc(draft.interestMode)}" />
+          <input type="hidden" name="interestRate" value="${esc(draft.interestRate)}" />
+          <input type="hidden" name="rateType" value="${esc(draft.rateType)}" />
+          <input type="hidden" name="fixedInterest" value="${esc(draft.fixedInterest)}" />
+        </div>
         ${field({ label: 'Número de cuotas', name: 'installments', type: 'number', value: draft.installments, min: '1', step: '1', required: true })}
         ${field({ label: 'Sistema de amortización', name: 'amortization', value: draft.amortization, options: AMORTIZATIONS, className: 'span-2' })}
         ${field({ label: 'Frecuencia de pago', name: 'frequency', value: draft.frequency, options: FREQUENCIES })}
@@ -149,6 +173,13 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
 
   const form = modal.body.querySelector<HTMLFormElement>('#loan-form')!;
   const previewEl = modal.body.querySelector<HTMLElement>('#loan-preview');
+  const interestModeInput = form.querySelector<HTMLInputElement>('[name="interestMode"]')!;
+  const interestRateInput = form.querySelector<HTMLInputElement>('[name="interestRate"]')!;
+  const rateTypeInput = form.querySelector<HTMLInputElement>('[name="rateType"]')!;
+  const fixedInterestInput = form.querySelector<HTMLInputElement>('[name="fixedInterest"]')!;
+  const interestTitleEl = form.querySelector<HTMLElement>('[data-interest-title]');
+  const interestSubEl = form.querySelector<HTMLElement>('[data-interest-sub]');
+  const interestIconEl = form.querySelector<HTMLElement>('[data-interest-icon]');
   const freqSelect = form.querySelector<HTMLSelectElement>('[name="frequency"]')!;
   const customWrap = form.querySelector<HTMLElement>('[data-custom-days]');
   const lateSelect = form.querySelector<HTMLSelectElement>('[name="lateFeeType"]')!;
@@ -175,6 +206,8 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
       principal: num(data.principal),
       interestRate: num(data.interestRate),
       rateType: data.rateType as RateType,
+      interestMode: (data.interestMode || 'percent') as InterestMode,
+      fixedInterest: num(data.fixedInterest),
       amortization: data.amortization as Amortization,
       frequency: data.frequency as Frequency,
       customDays: num(data.customDays) || 15,
@@ -214,7 +247,11 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
         <div class="calc-row"><span>Intereses totales</span><strong>${money(totalInterest)}</strong></div>
         ${num(temp.fees) > 0 ? `<div class="calc-row"><span>Cargo inicial</span><strong>${money(temp.fees)}</strong></div>` : ''}
         <div class="calc-row calc-row--total"><span>Total a pagar</span><strong>${money(view.totals.toPay)}</strong></div>
-        <div class="calc-row"><span>Tasa por período</span><strong>${rate.toFixed(2)}%</strong></div>
+        ${
+          temp.interestMode === 'percent'
+            ? `<div class="calc-row"><span>Tasa por período</span><strong>${rate.toFixed(2)}%</strong></div>`
+            : `<div class="calc-row"><span>${esc(interestModeMeta(temp.interestMode).short)}</span><strong>${money(temp.fixedInterest)}</strong></div>`
+        }
         <div class="calc-row"><span>Último vencimiento</span><strong>${last ? formatDate(last.dueDate, 'medium') : '—'}</strong></div>
       </div>
       <div class="preview-schedule">
@@ -222,8 +259,131 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
         ${view.rows.length > 5 ? `<div class="preview-schedule-more">+ ${view.rows.length - 5} cuotas más</div>` : ''}
       </div>
       ${warning ? `<div class="calc-alert">${icon('alert', 13)} ${esc(warning)}</div>` : ''}
-      ${temp.interestRate === 0 ? `<div class="calc-alert" style="color:var(--info)">${icon('info', 13)} Préstamo sin intereses.</div>` : ''}
+      ${totalInterest <= 0 ? `<div class="calc-alert" style="color:var(--info)">${icon('info', 13)} Préstamo sin intereses.</div>` : ''}
     `;
+  };
+
+  const syncInterestSummary = (): void => {
+    const mode = (interestModeInput.value || 'percent') as InterestMode;
+    const meta = interestModeMeta(mode);
+    if (interestTitleEl) {
+      interestTitleEl.textContent = interestTitle(
+        mode,
+        num(interestRateInput.value),
+        num(fixedInterestInput.value),
+        rateTypeInput.value,
+      );
+    }
+    if (interestSubEl) interestSubEl.textContent = meta.hint;
+    if (interestIconEl) interestIconEl.innerHTML = icon(mode === 'percent' ? 'percent' : 'coins', 17);
+  };
+
+  const openInterestPicker = (): void => {
+    const currentMode = (interestModeInput.value || 'percent') as InterestMode;
+    const currentRate = num(interestRateInput.value);
+    const currentFixed = num(fixedInterestInput.value);
+    const currentBase = rateTypeInput.value || 'monthly';
+
+    const picker = openModal({
+      title: 'Tipo de interés',
+      subtitle: 'Elige cómo se calcula el interés y define el valor.',
+      size: 'md',
+      className: 'modal--interest',
+      body: `<form id="interest-form" autocomplete="off">
+        <div class="interest-modes">
+          ${INTEREST_MODES.map(
+            (mode) => `<label class="interest-option">
+              <input type="radio" name="interestMode" value="${esc(mode.value)}" ${mode.value === currentMode ? 'checked' : ''} />
+              <span class="interest-option-body">
+                <span class="interest-option-icon">${icon(mode.value === 'percent' ? 'percent' : 'coins', 18)}</span>
+                <span class="interest-option-copy"><strong>${esc(mode.label)}</strong><small>${esc(mode.hint)}</small></span>
+              </span>
+            </label>`,
+          ).join('')}
+        </div>
+        <div class="interest-value-grid" style="margin-top:16px">
+          <div data-interest-percent class="${currentMode === 'percent' ? '' : 'hidden'}">
+            ${field({ label: 'Tasa de interés', name: 'interestRatePicker', type: 'number', value: currentMode === 'percent' ? currentRate : 5, min: '0', step: '0.01', suffix: '%', required: true })}
+          </div>
+          <div data-interest-base class="${currentMode === 'percent' ? '' : 'hidden'}">
+            ${field({ label: 'Base de la tasa', name: 'rateTypePicker', value: currentBase, options: RATE_TYPES })}
+          </div>
+          <div data-interest-fixed class="${currentMode === 'percent' ? 'hidden' : ''} span-2">
+            ${field({ label: 'Monto del interés', name: 'fixedInterestPicker', type: 'number', value: currentMode === 'percent' ? 0 : currentFixed, min: '0', step: currencyStep(), suffix: currency(), required: true })}
+          </div>
+        </div>
+        <div class="form-note form-note--info" style="margin-top:14px" data-interest-example></div>
+      </form>`,
+      footer: `<button class="btn btn-ghost" type="button" data-close>Cancelar</button>
+        <button class="btn btn-primary" type="button" data-apply-interest>${icon('check', 16)} Aplicar interés</button>`,
+    });
+
+    const pickerForm = picker.body.querySelector<HTMLFormElement>('#interest-form')!;
+    const modeRadios = pickerForm.querySelectorAll<HTMLInputElement>('[name="interestMode"]');
+    const percentWrap = pickerForm.querySelector<HTMLElement>('[data-interest-percent]')!;
+    const baseWrap = pickerForm.querySelector<HTMLElement>('[data-interest-base]')!;
+    const fixedWrap = pickerForm.querySelector<HTMLElement>('[data-interest-fixed]')!;
+    const exampleEl = pickerForm.querySelector<HTMLElement>('[data-interest-example]')!;
+    const ratePicker = pickerForm.querySelector<HTMLInputElement>('[name="interestRatePicker"]')!;
+    const basePicker = pickerForm.querySelector<HTMLSelectElement>('[name="rateTypePicker"]')!;
+    const fixedPicker = pickerForm.querySelector<HTMLInputElement>('[name="fixedInterestPicker"]')!;
+    const fixedLabel = fixedWrap.querySelector<HTMLElement>('.field-label')!;
+
+    const selectedMode = (): InterestMode => {
+      const checked = Array.from(modeRadios).find((radio) => radio.checked);
+      return (checked?.value || 'percent') as InterestMode;
+    };
+
+    const syncPicker = (): void => {
+      const mode = selectedMode();
+      const isPercent = mode === 'percent';
+      percentWrap.classList.toggle('hidden', !isPercent);
+      baseWrap.classList.toggle('hidden', !isPercent);
+      fixedWrap.classList.toggle('hidden', isPercent);
+      fixedLabel.innerHTML = `${esc(interestModeMeta(mode).short)} <em>*</em>`;
+
+      const data = readForm(form);
+      const principal = num(data.principal);
+      const installments = Math.max(1, Math.round(num(data.installments) || 1));
+      if (isPercent) {
+        exampleEl.innerHTML = `${icon('info', 14)} El interés se calcula como porcentaje sobre el capital o el saldo, según la base elegida.`;
+        return;
+      }
+      const value = num(fixedPicker.value);
+      const total = mode === 'fixed_total' ? value : Math.round(value * installments * 100) / 100;
+      const detail =
+        mode === 'fixed_total'
+          ? `El interés total del préstamo será ${money(total)}.`
+          : `Cada cuota llevará ${money(value)} de interés; el total será ${money(total)}.`;
+      exampleEl.innerHTML = `${icon('info', 14)} ${esc(detail)} Capital ${money(principal)} + interés ${money(total)} = ${money(principal + total)} a pagar.`;
+    };
+
+    modeRadios.forEach((radio) => radio.addEventListener('change', syncPicker));
+    pickerForm.addEventListener('input', syncPicker);
+    syncPicker();
+
+    picker.root.querySelector<HTMLElement>('[data-apply-interest]')!.addEventListener('click', () => {
+      const mode = selectedMode();
+      const isPercent = mode === 'percent';
+      const rate = num(ratePicker.value);
+      const fixed = num(fixedPicker.value);
+      if (rate < 0 || fixed < 0) {
+        toast('El interés no puede ser negativo.', 'error');
+        return;
+      }
+      interestModeInput.value = mode;
+      if (isPercent) {
+        interestRateInput.value = String(rate);
+        rateTypeInput.value = basePicker.value || 'monthly';
+        fixedInterestInput.value = '0';
+      } else {
+        interestRateInput.value = '0';
+        fixedInterestInput.value = String(fixed);
+      }
+      syncInterestSummary();
+      refreshPreview();
+      picker.close();
+    });
   };
 
   if (!hasPayments) {
@@ -252,6 +412,9 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
     startInput.addEventListener('change', autoFirstDue);
     const customDaysInput = form.querySelector<HTMLInputElement>('[name="customDays"]')!;
     if (customDaysInput) customDaysInput.addEventListener('change', autoFirstDue);
+    const interestBtn = form.querySelector<HTMLElement>('[data-interest-open]');
+    if (interestBtn) interestBtn.addEventListener('click', openInterestPicker);
+    syncInterestSummary();
     syncConditional();
     refreshPreview();
 
@@ -292,6 +455,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
               ...data,
               principal: num(data.principal),
               interestRate: num(data.interestRate),
+              fixedInterest: num(data.fixedInterest),
               installments: num(data.installments),
               customDays: num(data.customDays) || 15,
               fees: num(data.fees),
@@ -306,6 +470,7 @@ export function openLoanForm({ loanId = null, clientId = null, initial = null }:
           ...data,
           principal: num(data.principal),
           interestRate: num(data.interestRate),
+          fixedInterest: num(data.fixedInterest),
           installments: num(data.installments),
           customDays: num(data.customDays) || 15,
           fees: num(data.fees),

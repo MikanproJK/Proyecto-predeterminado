@@ -1,7 +1,7 @@
 /* Recibos, contratos e impresión */
 
 import { state, paymentsFor } from '../lib/store.js';
-import { money, num, round2, computeLoan, formatDate, FREQUENCIES, AMORTIZATIONS, RATE_TYPES, LATE_FEE_TYPES } from '../finance.js';
+import { money, num, round2, computeLoan, formatDate, FREQUENCIES, AMORTIZATIONS, LATE_FEE_TYPES, interestSummary } from '../finance.js';
 import { openModal, toast, esc, icon } from '../lib/ui.js';
 
 import type { LoanView, Payment } from '../types.js';
@@ -161,7 +161,7 @@ export function openContract(loanId: string): void {
     <div class="receipt-grid" style="margin-top:18px">
       <div><span>Capital entregado</span><strong>${money(loan.totals.principal)}</strong></div>
       <div><span>Total a pagar</span><strong>${money(loan.totals.toPay)}</strong></div>
-      <div><span>Tasa de interés</span><strong>${num(loan.interestRate)}% ${esc(RATE_TYPES.find((r) => r.value === loan.rateType)?.label || '')}</strong></div>
+      <div><span>Interés pactado</span><strong>${esc(interestSummary(loan))}</strong></div>
       <div><span>Sistema</span><strong>${esc(AMORTIZATIONS.find((a) => a.value === loan.amortization)?.label || '')}</strong></div>
       <div><span>Frecuencia</span><strong>${esc(FREQUENCIES.find((f) => f.value === loan.frequency)?.label || '')}</strong></div>
       <div><span>Número de cuotas</span><strong>${loan.installments}</strong></div>

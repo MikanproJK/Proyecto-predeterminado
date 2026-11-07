@@ -10,6 +10,7 @@ import type {
   Frequency,
   ISODate,
   InstallmentState,
+  InterestMode,
   LateFeeType,
   Loan,
   LoanId,
@@ -320,6 +321,66 @@ export const RATE_TYPES: readonly RateTypeMeta[] = [
   { value: 'period', label: 'Por cuota' },
 ];
 
+export interface InterestModeMeta {
+  value: InterestMode;
+  label: string;
+  short: string;
+  hint: string;
+}
+
+export const INTEREST_MODES: readonly InterestModeMeta[] = [
+  {
+    value: 'percent',
+    label: 'Porcentaje',
+    short: 'Tasa de interés',
+    hint: 'Se calcula un porcentaje sobre el capital o el saldo, según la base de la tasa.',
+  },
+  {
+    value: 'fixed_total',
+    label: 'Monto fijo total',
+    short: 'Interés total',
+    hint: 'Un monto exacto de interés para todo el préstamo. Se reparte entre las cuotas.',
+  },
+  {
+    value: 'fixed_installment',
+    label: 'Monto fijo por cuota',
+    short: 'Interés por cuota',
+    hint: 'El mismo monto de interés se suma a cada cuota del plan.',
+  },
+  {
+    value: 'fixed_period',
+    label: 'Monto fijo por período',
+    short: 'Interés por período',
+    hint: 'El monto se cobra en cada período mientras exista saldo pendiente.',
+  },
+];
+
+export function interestModeMeta(value?: string | null): InterestModeMeta {
+  return INTEREST_MODES.find((mode) => mode.value === value) || INTEREST_MODES[0];
+}
+
+export function interestModeOf(loan: LoanTerms): InterestMode {
+  const mode = loan.interestMode;
+  return mode === 'fixed_total' || mode === 'fixed_installment' || mode === 'fixed_period' ? mode : 'percent';
+}
+
+export function isFixedInterest(loan: LoanTerms): boolean {
+  return interestModeOf(loan) !== 'percent';
+}
+
+/** Texto corto y consistente para mostrar el interés pactado en listados y documentos. */
+export function interestSummary(loan: LoanTerms): string {
+  const mode = interestModeOf(loan);
+  if (mode === 'percent') {
+    const base = RATE_TYPES.find((rate) => rate.value === loan.rateType)?.label || 'Mensual';
+    return `${num(loan.interestRate)}% ${base.toLowerCase()}`;
+  }
+  const amount = money(num(loan.fixedInterest));
+  if (mode === 'fixed_total') return `Interés total ${amount}`;
+  if (mode === 'fixed_installment') return `${amount} por cuota`;
+  return `${amount} por período`;
+}
+
 export const LATE_FEE_TYPES: readonly LateFeeTypeMeta[] = [
   { value: 'none', label: 'Sin mora' },
   { value: 'percent_daily', label: '% diario sobre saldo' },
@@ -380,6 +441,47 @@ export function dueDateFor(loan: LoanTerms, firstDueDate: string | undefined, in
 
 /* ---------- cronograma ---------- */
 
+/**
+ * Reparte un interés total fijo entre los períodos respetando la forma del
+ * método de amortización. La suma siempre coincide exactamente con el monto.
+ */
+function distributeFixedInterest(
+  total: number,
+  principal: number,
+  periods: number,
+  method: Amortization,
+): number[] {
+  const safeTotal = round2(Math.max(0, total));
+  if (safeTotal <= 0) return Array.from({ length: periods }, () => 0);
+
+  const weights: number[] = [];
+  if (method === 'flat' || method === 'bullet') {
+    for (let k = 0; k < periods; k += 1) weights.push(1);
+  } else {
+    // Interés decreciente: proporcional al saldo con abono constante a capital.
+    let balance = principal;
+    const capital = principal / periods;
+    for (let k = 0; k < periods; k += 1) {
+      weights.push(Math.max(0, balance));
+      balance -= capital;
+    }
+  }
+
+  const weightSum = weights.reduce((acc, value) => acc + value, 0) || 1;
+  const plan: number[] = [];
+  let remaining = safeTotal;
+  for (let k = 0; k < periods; k += 1) {
+    if (k === periods - 1) {
+      plan.push(round2(remaining));
+    } else {
+      const value = round2((safeTotal * weights[k]) / weightSum);
+      plan.push(value);
+      remaining = round2(remaining - value);
+    }
+  }
+  return plan;
+}
+
 export class LoanCalculator {
   periodDays(loan: LoanTerms): number {
     return periodDays(loan);
@@ -400,22 +502,51 @@ export class LoanCalculator {
   buildSchedule(loan: LoanTerms): ScheduleRow[] {
     const periods = Math.max(1, Math.round(num(loan.installments) || 1));
     const principal = round2(num(loan.principal));
-    const rate = periodRate(loan);
+    const mode = interestModeOf(loan);
+    const rate = mode === 'percent' ? periodRate(loan) : 0;
     const method = loan.amortization || 'fixed';
     const first = loan.firstDueDate || loan.startDate || todayISO();
     const extraCharge = round2(num(loan.fees));
     const grace = Math.max(0, Math.round(num(loan.graceDays)));
 
+    const fixedAmount = round2(Math.max(0, num(loan.fixedInterest)));
+    const totalFixedInterest =
+      mode === 'fixed_total'
+        ? fixedAmount
+        : mode === 'fixed_installment' || mode === 'fixed_period'
+          ? round2(fixedAmount * periods)
+          : 0;
+
+    let interestPlan: number[] | null = null;
+    if (mode === 'fixed_total') {
+      interestPlan = distributeFixedInterest(totalFixedInterest, principal, periods, method);
+    } else if (mode === 'fixed_installment' || mode === 'fixed_period') {
+      interestPlan = Array.from({ length: periods }, () => fixedAmount);
+    }
+
     const rows: ScheduleRow[] = [];
     let balance = principal;
     const fixedPayment = rate > 0 ? (principal * rate) / (1 - Math.pow(1 + rate, -periods)) : principal / periods;
     const fixedCapital = principal / periods;
+    const fixedTotalPayment = interestPlan ? round2((principal + totalFixedInterest) / periods) : 0;
 
     for (let k = 1; k <= periods; k += 1) {
       let interest = 0;
       let capital = 0;
 
-      if (method === 'bullet') {
+      if (interestPlan) {
+        interest = interestPlan[k - 1];
+        // El interés por período solo se cobra mientras quede saldo pendiente.
+        if (mode === 'fixed_period' && balance <= 0.004) interest = 0;
+
+        if (method === 'bullet') {
+          capital = k === periods ? round2(balance) : 0;
+        } else if (method === 'fixed') {
+          capital = k === periods ? round2(balance) : round2(fixedTotalPayment - interest);
+        } else {
+          capital = k === periods ? round2(balance) : round2(fixedCapital);
+        }
+      } else if (method === 'bullet') {
         interest = round2(balance * rate);
         capital = k === periods ? round2(balance) : 0;
       } else if (method === 'flat') {

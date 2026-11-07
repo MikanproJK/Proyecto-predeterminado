@@ -12,8 +12,8 @@ import {
   daysBetween,
   FREQUENCIES,
   AMORTIZATIONS,
-  RATE_TYPES,
   LATE_FEE_TYPES,
+  interestSummary,
 } from '../finance.js';
 import {
   icon,
@@ -218,7 +218,7 @@ export function render(root: HTMLElement, ctx: ViewContext): void {
               </div>
               <div class="loan-card-foot">
                 <span>${loan.totals.lateDue > 0 ? badge(`Mora ${money(loan.totals.lateDue)}`, 'danger', { dot: true }) : overdue ? badge('En mora', 'danger', { dot: true }) : badge('Sin mora', 'success')}</span>
-                <span>${esc(FREQUENCIES.find((f) => f.value === loan.frequency)?.label || '')} · ${num(loan.interestRate)}%</span>
+                <span>${esc(FREQUENCIES.find((f) => f.value === loan.frequency)?.label || '')} · ${esc(interestSummary(loan))}</span>
               </div>
             </article>`;
           })
@@ -332,7 +332,6 @@ function renderDetail(root: HTMLElement, ctx: ViewContext): void {
   const next = nextRow(loan);
   const freq = FREQUENCIES.find((f) => f.value === loan.frequency);
   const amort = AMORTIZATIONS.find((a) => a.value === loan.amortization);
-  const rateBase = RATE_TYPES.find((r) => r.value === loan.rateType);
   const lateType = LATE_FEE_TYPES.find((l) => l.value === loan.lateFeeType);
   const account = state.db.accounts.find((a) => a.id === loan.accountId);
   const isCancelled = loan.state === 'cancelled';
@@ -403,7 +402,7 @@ function renderDetail(root: HTMLElement, ctx: ViewContext): void {
             </h2>
             <p>
               <button class="link-btn" type="button" data-client>${esc(client?.name || 'Cliente')}</button>
-              · ${esc(freq?.label || '')} · ${esc(amort?.label || '')} · ${num(loan.interestRate)}% ${esc(rateBase?.label?.toLowerCase() || '')}
+              · ${esc(freq?.label || '')} · ${esc(amort?.label || '')} · ${esc(interestSummary(loan))}
             </p>
             <p>${icon('calendar', 13)} Entregado ${formatDate(loan.startDate, 'medium')} · ${loan.installments} cuotas de ${money(loan.rows[0]?.amount || 0)}</p>
           </div>
@@ -491,7 +490,7 @@ function renderDetail(root: HTMLElement, ctx: ViewContext): void {
           </div>
           <div class="card-body">
             <div class="info-grid">
-              <div class="info-item"><span>Tasa</span><strong>${num(loan.interestRate)}% ${esc(rateBase?.label?.toLowerCase() || '')}</strong></div>
+              <div class="info-item"><span>Interés</span><strong>${esc(interestSummary(loan))}</strong></div>
               <div class="info-item"><span>Sistema</span><strong>${esc(amort?.label || '—')}</strong></div>
               <div class="info-item"><span>Frecuencia</span><strong>${esc(freq?.label || '—')}</strong></div>
               <div class="info-item"><span>Cuotas</span><strong>${loan.installments}</strong></div>

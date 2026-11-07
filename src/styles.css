@@ -2173,6 +2173,167 @@ textarea.input {
 .input-affix--prefix { left: 11px; }
 .input-affix--suffix { right: 11px; }
 
+/* ---------- selector de interés ---------- */
+
+.interest-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast), box-shadow var(--fast);
+}
+
+.interest-picker:hover {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.interest-picker:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.interest-picker-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 9px;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.interest-picker-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.interest-picker-copy strong {
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.interest-picker-copy small {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--text-mute);
+}
+
+.interest-picker-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 0.7rem;
+  font-weight: 620;
+  color: var(--primary);
+}
+
+.interest-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.interest-option {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+.interest-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.interest-option-body {
+  display: flex;
+  gap: 10px;
+  height: 100%;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  transition: border-color var(--fast), background var(--fast), box-shadow var(--fast);
+}
+
+.interest-option:hover .interest-option-body {
+  border-color: var(--border-strong);
+}
+
+.interest-option input:checked + .interest-option-body {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.interest-option input:focus-visible + .interest-option-body {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.interest-option-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--primary);
+}
+
+.interest-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.interest-option-copy strong {
+  font-size: 0.79rem;
+  font-weight: 650;
+}
+
+.interest-option-copy small {
+  font-size: 0.67rem;
+  line-height: 1.35;
+  color: var(--text-mute);
+}
+
+.interest-value-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
+}
+
+.interest-value-grid .span-2 {
+  grid-column: span 2;
+}
+
+@media (max-width: 720px) {
+  .interest-modes,
+  .interest-value-grid {
+    grid-template-columns: 1fr;
+  }
+  .interest-value-grid .span-2 {
+    grid-column: span 1;
+  }
+}
+
 .switch-field {
   display: flex;
   align-items: center;

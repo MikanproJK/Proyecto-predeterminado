@@ -138,6 +138,71 @@ test('solo interés difiere el capital al último período', () => {
   assert.ok(rows[0].interest > 0);
 });
 
+test('interés total fijo se reparte exacto y conserva los cuatro métodos', () => {
+  for (const amortization of ['fixed', 'declining', 'flat', 'bullet'] as const) {
+    const rows = buildSchedule(
+      baseLoan({
+        principal: 1000,
+        installments: 4,
+        amortization,
+        interestMode: 'fixed_total',
+        fixedInterest: 200,
+        interestRate: 0,
+      }),
+    );
+    close(rows.reduce((acc, row) => acc + row.interest, 0), 200);
+    close(rows.reduce((acc, row) => acc + row.capital, 0), 1000);
+    close(rows[rows.length - 1].balance, 0);
+  }
+});
+
+test('interés fijo por cuota suma el mismo monto en cada cuota', () => {
+  const rows = buildSchedule(
+    baseLoan({
+      principal: 1200,
+      installments: 6,
+      interestMode: 'fixed_installment',
+      fixedInterest: 15,
+      interestRate: 0,
+    }),
+  );
+  rows.forEach((row) => close(row.interest, 15));
+  close(rows.reduce((acc, row) => acc + row.interest, 0), 90);
+  close(rows.reduce((acc, row) => acc + row.capital, 0), 1200);
+});
+
+test('interés fijo por período se cobra mientras exista saldo', () => {
+  const rows = buildSchedule(
+    baseLoan({
+      principal: 900,
+      installments: 3,
+      amortization: 'declining',
+      interestMode: 'fixed_period',
+      fixedInterest: 30,
+      interestRate: 0,
+    }),
+  );
+  rows.forEach((row) => close(row.interest, 30));
+  close(rows[0].amount, 330);
+  close(rows[2].balance, 0);
+});
+
+test('el interés total fijo se refleja en el total a pagar', () => {
+  const view = computeLoan(
+    baseLoan({
+      principal: 1000,
+      installments: 4,
+      interestMode: 'fixed_total',
+      fixedInterest: 250,
+      interestRate: 0,
+    }),
+    [],
+    '2024-01-01',
+  );
+  close(view.totals.interest, 250);
+  close(view.totals.toPay, 1250);
+});
+
 test('el cargo inicial se suma solo a la primera cuota', () => {
   const rows = buildSchedule(baseLoan({ principal: 300, installments: 3, fees: 25 }));
   close(rows[0].charge, 25);
